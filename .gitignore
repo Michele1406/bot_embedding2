@@ -1,0 +1,34 @@
+﻿# Ambiente virtuale Python
+.venv/
+venv/
+ENV/
+
+# File di configurazione e credenziali (CRITICO: non pubblicare mai API KEY!)
+.env
+*.env
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.class
+
+# File binari ed eseguibili pesanti
+cloudflared.exe
+*.exe
+
+# File temporanei, backup e log
+*.log
+tunnel.log
+ultimo_link_tunnel.txt
+backup/
+backups/
+Nuova cartella/
+
+# Log di chat
+log/
+
+# File di sistema e IDE
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
