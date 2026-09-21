@@ -135,29 +135,6 @@ def avvia_chatbot():
         if not user_query:
             continue
 
-        # EASTER EGG SPECIALE
-        q_norm = user_query.strip().lower()
-        q_raw = user_query.lower()
-        if q_raw == " ano fame" or q_norm == "ano fame":
-            risposta = "KI?"
-            print(f"\nNino: {risposta}\n")
-            storico.append(types.Content(role="user", parts=[types.Part.from_text(text=user_query)]))
-            storico.append(types.Content(role="model", parts=[types.Part.from_text(text=risposta)]))
-            continue
-
-        if q_norm in ["le scimie", "le scimmie"]:
-            ultimo_bot = ""
-            if storico:
-                for msg in reversed(storico):
-                    if msg.role == "model":
-                        ultimo_bot = "".join(p.text for p in msg.parts if getattr(p, "text", None)).strip()
-                        break
-            if ultimo_bot == "KI?" or not ultimo_bot:
-                risposta = "GAS ei ou lo vuoi , ki Maicol, no volerlo, tu lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi, ei "
-                print(f"\nNino: {risposta}\n")
-                storico.append(types.Content(role="user", parts=[types.Part.from_text(text=user_query)]))
-                storico.append(types.Content(role="model", parts=[types.Part.from_text(text=risposta)]))
-                continue
 
         # RISCRITTURA QUERY CON CONTESTO COMPLETO
         testo_per_ricerca = user_query
