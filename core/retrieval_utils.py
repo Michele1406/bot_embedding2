@@ -1,5 +1,5 @@
 from core.agent_topology import IntentClassification
-from core.domain_rules import check_board_violations
+from core.domain_rules import check_board_violations, prodotto_appartiene_a_famiglia, INCOMPATIBILITY_MATRIX
 """
 retrieval_utils.py
 ====================
@@ -513,6 +513,7 @@ def componi_proposta_da_ricettario(richiesta_cliente: str, tipo_locale: "str | N
     # Step 2: Riempi gli slot (qui c'è la ricerca ibrida vera e propria)
     
     # 3 retries for Constraint Solver
+    violations = []
     for attempt in range(3):
         slot_riempiti = riempi_slot_ricetta(
             template_scelto,
@@ -527,17 +528,57 @@ def componi_proposta_da_ricettario(richiesta_cliente: str, tipo_locale: "str | N
             prodotti_esclusi=prodotti_esclusi,
             piano_ricerca=piano_ricerca
         )
-        
+
         # Check violations
         board_products = [s["prodotto_trovato"] for s in slot_riempiti if s.get("prodotto_trovato")]
         violations = check_board_violations(board_products, allow_terra_mare=True)
         if not violations:
             break
-            
+
         print(f"[CONSTRAINT SOLVER] Violazioni rilevate (Attempt {attempt+1}): {violations}")
-        # Add offending products to exclusions to force different selection next iteration
-        for prod in board_products:
-            prodotti_esclusi.add(prod["id"])
+        # FIX: prima escludevamo TUTTI i prodotti del board (anche quelli senza
+        # nessun problema, es. pane/olive già corretti), buttando via lavoro
+        # buono e rischiando comunque di ripescare la stessa combinazione
+        # sbagliata al giro dopo perché l'esclusione non era mirata alla
+        # famiglia incriminata. Ora escludiamo solo i prodotti effettivamente
+        # coinvolti nelle violazioni rilevate (quelli citati nel messaggio di
+        # errore), lasciando intatte le altre scelte già corrette.
+        nomi_incriminati = set()
+        for v in violations:
+            if "referenze coinvolte:" in v:
+                elenco = v.split("referenze coinvolte:")[-1].strip(" )")
+                nomi_incriminati.update(n.strip().lower() for n in elenco.split(","))
+        if nomi_incriminati:
+            for prod in board_products:
+                doc = prod.get("document", "") or ""
+                nome = doc.splitlines()[0].strip().lower() if doc else ""
+                if nome in nomi_incriminati:
+                    prodotti_esclusi.add(prod["id"])
+        else:
+            # Fallback: se per qualche motivo non si riescono a isolare i nomi
+            # (es. regola TERRA_MARE_MIX, che non ne elenca), escludiamo
+            # comunque tutto il board come rete di sicurezza (comportamento
+            # precedente), meglio ripartire da capo che restare bloccati.
+            for prod in board_products:
+                prodotti_esclusi.add(prod["id"])
+
+    if violations:
+        # Rete di sicurezza finale: dopo 3 tentativi il board ha ancora
+        # violazioni note. Prima venivano semplicemente ignorate e la proposta
+        # usciva comunque come se fosse a posto. Ora lo segnaliamo esplicitamente
+        # nel testo che arriva al modello, così Nino può almeno scegliere di
+        # ammorbidire la proposta o avvisare il cliente, invece di presentare
+        # con sicurezza una combinazione che il sistema stesso sa essere
+        # discutibile.
+        print(f"[CONSTRAINT SOLVER] Esauriti i tentativi con violazioni residue: {violations}")
+        template_scelto = dict(template_scelto)
+        nota_esistente = template_scelto.get("note_composizione", "") or ""
+        template_scelto["note_composizione"] = (
+            nota_esistente
+            + " [AVVISO INTERNO NON DA MOSTRARE AL CLIENTE: la combinazione proposta potrebbe avere una "
+            + "ripetizione di texture/famiglia non ideale (" + "; ".join(violations) + "). "
+            + "Se puoi, presenta la proposta con più cautela o offri di modificarla su richiesta.]"
+        )
 
     return formatta_proposta_ricetta(template_scelto, slot_riempiti)
 
@@ -1270,23 +1311,40 @@ def _seleziona_componente_tagliere(ruolo: str, regione: str, collezione_prodotti
     conteggio_forn = {}
     conteggio_sottocategoria = {}
     selezionati = []
-    
+
     for r in filtrati:
         f = r["metadata"].get("nome_fornitore", "").lower()
         sc = str(r["metadata"].get("sottocategoria", "")).lower()
-        
+
+        # Chiave di diversità: FAMIGLIA gastronomica (INCOMPATIBILITY_MATRIX di
+        # domain_rules.py) se il prodotto appartiene a una famiglia nota (es.
+        # "Finocchiona" e "Salame Toscano" sono entrambi SALUMI_MACINATI anche
+        # se la loro sottocategoria in ChromaDB è taggata in modo diverso —
+        # "SALAME" per uno, il bucket generico "SALUMI INTERI/TRANCI" per
+        # l'altro: capitava che finissero considerati "categorie diverse" e
+        # comparissero insieme nello stesso tagliere). Se il prodotto non
+        # appartiene a nessuna famiglia nota, si ricade sulla sottocategoria
+        # grezza come prima.
+        chiave_diversita = sc
+        for rule_name in INCOMPATIBILITY_MATRIX:
+            if rule_name == "TERRA_MARE_MIX":
+                continue
+            if prodotto_appartiene_a_famiglia(r, rule_name):
+                chiave_diversita = rule_name
+                break
+
         # Se la sottocategoria è forzata dall'utente, permettiamo infiniti cloni di quella sottocategoria, 
         # altrimenti capiamo a 1 per favorire l'eterogeneità (es. 1 solo prosciutto, 1 solo salame)
         if sottocategoria_forzata and sottocategoria_forzata.lower() in sc:
             cap_sc = 99
         else:
             cap_sc = 1
-            
-        if conteggio_forn.get(f, 0) < cap_forn and conteggio_sottocategoria.get(sc, 0) < cap_sc:
+
+        if conteggio_forn.get(f, 0) < cap_forn and conteggio_sottocategoria.get(chiave_diversita, 0) < cap_sc:
             selezionati.append(r)
             conteggio_forn[f] = conteggio_forn.get(f, 0) + 1
-            conteggio_sottocategoria[sc] = conteggio_sottocategoria.get(sc, 0) + 1
-            
+            conteggio_sottocategoria[chiave_diversita] = conteggio_sottocategoria.get(chiave_diversita, 0) + 1
+
         if len(selezionati) >= n_target:
             break
             
