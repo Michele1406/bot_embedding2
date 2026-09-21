@@ -32,3 +32,10 @@ log/
 .idea/
 Thumbs.db
 .DS_Store
+
+# Esclusioni aggiuntive manuali
+tassonomia.txt
+chat.txt
+correzioni_chat.jsonl
+ecr_tassonomia.json
+backup_*/

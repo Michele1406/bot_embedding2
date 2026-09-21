@@ -1,0 +1,51 @@
+========================================================
+  AVVIO SERVER NINO (SO FOOD)
+========================================================
+
+[INFO] Indice codici prodotto costruito: 1224 codici mappati.
+[INFO] Indice fornitori costruito: 74 fornitori mappati.
+[INFO] Indice testuale catalogo costruito: 1227 prodotti indicizzati in memoria.
+======================================================================
+[OK] SERVER FLASK AVVIATO CON SUCCESSO!
+>>> Apri il tuo browser e vai all'indirizzo: http://127.0.0.1:5000
+======================================================================
+ * Serving Flask app 'app'
+ * Debug mode: on
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:5000
+Press CTRL+C to quit
+127.0.0.1 - - [16/Sep/2026 14:50:47] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 14:50:48] "GET /logo.png HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 14:50:48] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [16/Sep/2026 14:50:48] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [16/Sep/2026 14:50:48] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [16/Sep/2026 14:50:49] "GET /favicon.ico HTTP/1.1" 404 -
+Direct use of automatic function calling (AFC) in Models.generate_content is not recommended. Instead, we recommend to use AFC in Chat.send_message. Similarly, direct use of AFC in Models.generate_content_stream is not recommended. Instead, we recommend to use AFC in Chat.send_message_stream.
+[ATTENZIONE] Riscrittura query fallita, uso l'originale. Errore: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}
+[ATTENZIONE] Analisi e profilazione fallita (503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}), fallback euristico.
+[DEBUG PROFILO] Tipo Locale: ristorante di mare | Stile: mare | Dieta: None | No Affettatrice: False | Città: None
+[DEBUG INTENT] Richiede Composizione: True (tagliere)
+[DEBUG RICETTARIO] Proposta trovata: Tagliere di Salumi di Mare
+127.0.0.1 - - [16/Sep/2026 14:51:46] "POST /chat HTTP/1.1" 200 -
+[ATTENZIONE] Riscrittura query fallita, uso l'originale. Errore: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}
+[ATTENZIONE] Analisi e profilazione fallita (503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}), fallback euristico.
+[DEBUG PROFILO] Tipo Locale: ristorante di mare | Stile: mare | Dieta: None | No Affettatrice: False | Città: None
+[DEBUG INTENT] Richiede Composizione: False (nessuna)
+[DEBUG RICETTARIO] Proposta trovata: Tartare di Manzo Battuta al Coltello
+127.0.0.1 - - [16/Sep/2026 14:55:08] "POST /chat HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 14:55:09] "GET /immagine?path=C:\\Users\\baron\\LAVORO\\PRODOTTI%20SOFOOD\\19010843\\FARINO4\\FARINO4.jpg HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 14:55:09] "GET /immagine?path=C:\\Users\\baron\\LAVORO\\PRODOTTI%20SOFOOD\\19010679\\50100\\50100.jpg HTTP/1.1" 200 -
+[ATTENZIONE] Riscrittura query fallita, uso l'originale. Errore: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}
+[ATTENZIONE] Analisi e profilazione fallita (503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}), fallback euristico.
+[DEBUG PROFILO] Tipo Locale: ristorante di mare | Stile: mare | Dieta: None | No Affettatrice: False | Città: None
+[DEBUG INTENT] Richiede Composizione: False (nessuna)
+[DEBUG RICETTARIO] Proposta trovata: Carpaccio di Salmone Affumicato e Spada Marinato
+127.0.0.1 - - [16/Sep/2026 14:58:16] "POST /chat HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 14:58:17] "GET /immagine?path=C:\\Users\\baron\\LAVORO\\PRODOTTI%20SOFOOD\\19010007\\PC0273\\PC0273.jpg HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 14:58:17] "GET /immagine?path=C:\\Users\\baron\\LAVORO\\PRODOTTI%20SOFOOD\\19010444\\S030218\\S030218.jpg HTTP/1.1" 200 -
+[ATTENZIONE] Riscrittura query fallita, uso l'originale. Errore: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}
+[ATTENZIONE] Analisi e profilazione fallita (503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}), fallback euristico.
+[DEBUG PROFILO] Tipo Locale: ristorante di mare | Stile: mare | Dieta: None | No Affettatrice: False | Città: None
+[DEBUG INTENT] Richiede Composizione: False (nessuna)
+[DEBUG RICETTARIO] Proposta trovata: Cocktail di Gamberi in Salsa Rosa
+127.0.0.1 - - [16/Sep/2026 14:58:50] "POST /chat HTTP/1.1" 200 -

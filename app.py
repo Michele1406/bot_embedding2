@@ -10,8 +10,8 @@ import chromadb
 from pydantic import BaseModel
 from google import genai
 from google.genai import types
-from system_prompt_v2 import SYSTEM_PROMPT_NINO
-from retrieval_utils import (
+from core.system_prompt_v2 import SYSTEM_PROMPT_NINO
+from core.retrieval_utils import (
     costruisci_indice_codici,
     costruisci_indice_fornitori,
     costruisci_indice_testuale,
@@ -23,16 +23,20 @@ from retrieval_utils import (
     componi_proposta_da_ricettario,
     estrai_conteggi_tagliere,
     pulisci_nome_commerciale,
-    CLUSTER_REGIONALI,
     rileva_cluster_regionale,
 )
+from core.fornitori_config import FORNITORI, elenco_fornitori_per_ruolo_regione
+from core.profilazione_locale import rileva_canale_locale
+from core.tassonomia_sofood import classifica_terra_mare
+from core.query_decomposer import classify_intent, decompose_domain, verify_domain_rules
+from core.domain_rules import check_board_violations
 from dotenv import load_dotenv
 
 # Modelli Pydantic per Profilazione e Decomposizione Intelligente
 class SottoRicerca(BaseModel):
     query: str
-    reparto: str | None = None  # CARNI, DISPENSA, FORMAGGI, GELO, MARE, SALUMI
-    sottocategoria: str | None = None  # es. "Prosciutto crudo iberico", "Salumi e affettati di mare", "Basi per pizza e impasti", "Dessert e cremosi di latte"
+    reparto: str | None = None  # CARNE, DISPENSA, FORMAGGI, GELO, MARE, SALUMI
+    sottocategoria: str | None = None  # valore ESATTO (incluse MAIUSCOLE) da tassonomia_sofood.SOTTOCATEGORIE_NOMI, es. "PROSC CRUDO", "OLIVE", "GRISSINI", "PECORINO"
     categoria: str | None = None
 
 class ProfiloClienteAggiornato(BaseModel):
@@ -64,15 +68,16 @@ if not GEMINI_API_KEY:
     raise ValueError("ATTENZIONE: GEMINI_API_KEY non trovata nel file .env")
 
 MODELLO_EMBEDDING = "models/gemini-embedding-2"
-MODELLO_PRINCIPALE = "models/gemini-3.7-flash"
+MODELLO_PRINCIPALE = "models/gemini-3.6-flash"
 MODELLO_GEMINI = "models/gemini-3.5-flash-lite"
+MODELLO_FALLBACK = "models/gemini-3.5-flash-lite"
 MODELLO_AUDIO = "models/gemini-2.5-flash"
 MODELLO_AUDIO_FALLBACK = "models/gemini-3.5-flash-lite"
 PERCORSO_DATABASE_VETTORIALE = "./database_vettoriale"
 NOME_COLLEZIONE = "catalogo_sofood"
-N_RISULTATI_RAG = 25  # alzato da 15: catalogo grande e sbilanciato, servono più candidati
+N_RISULTATI_RAG = 45  # Aumentato drasticamente per passare più prodotti all'IA e massimizzare la fairness
 MAX_SCAMBI_STORICO = 7
-MAX_PRODOTTI_MOSTRATI_TRACCIATI = 40  # evita crescita infinita per sessioni lunghissime
+MAX_PRODOTTI_MOSTRATI_TRACCIATI = 60  # Aumentato per gestire i 45 prodotti
 
 # Cartelle di salvataggio
 CARTELLA_LOG_CHAT = Path("./log/chat")
@@ -252,11 +257,11 @@ COMPITI:
 
 3. SOTTO-RICERCHE CON ESPANSIONE CONCETTUALE:
    - REGOLA FONDAMENTALE: NON cercare parole generiche o astratte come 'tris', 'ciotoline', 'aperitivo', 'stuzzichini'. Espandile nei componenti gastronomici reali presenti in catalogo!
-   - In ciascuna SottoRicerca puoi specificare opzionalmente `reparto` ('CARNI', 'DISPENSA', 'FORMAGGI', 'GELO', 'MARE', 'SALUMI') e `sottocategoria` precisa:
+   - In ciascuna SottoRicerca puoi specificare opzionalmente `reparto` ('CARNE', 'DISPENSA', 'FORMAGGI', 'GELO', 'MARE', 'SALUMI') e `sottocategoria` (valore ESATTO tra quelli elencati in tassonomia_sofood.SOTTOCATEGORIE_NOMI, sempre in MAIUSCOLO, es. 'OLIVE', 'TARALLI', 'PECORINO', 'SALAME': se non sei sicuro del valore esatto, lascia sottocategoria vuoto e usa solo reparto + query, la ricerca semantica farà il resto):
      * Tris / ciotoline aperitivo da bar:
-       - SottoRicerca(reparto='DISPENSA', sottocategoria='Taralli e grissini', query='taralli pugliesi grissini snack Farino')
-       - SottoRicerca(reparto='DISPENSA', sottocategoria='Olive', query='olive da tavola Bella di Cerignola')
-       - SottoRicerca(reparto='DISPENSA', sottocategoria='Frutta secca e pistacchio', query='anacardi mandorle tostate Calugi')
+       - SottoRicerca(reparto='DISPENSA', sottocategoria='TARALLI', query='taralli pugliesi grissini snack Farino')
+       - SottoRicerca(reparto='DISPENSA', sottocategoria='OLIVE', query='olive da tavola Bella di Cerignola')
+       - SottoRicerca(reparto='DISPENSA', sottocategoria='FRUTTA SECCA SENZA GUSCIO', query='anacardi mandorle tostate Calugi')
       * Locale spagnolo / Tapas bar (Cluster Spagna Completo):
         - SottoRicerca(reparto='SALUMI', query='prosciutto bellota 100% iberico chorizo salchichon Solera')
         - SottoRicerca(reparto='SALUMI', query='cecina de leon Nieto')
@@ -264,32 +269,31 @@ COMPITI:
         - SottoRicerca(reparto='DISPENSA', query='picos taralli snack Farino')
       * Hamburgeria / Panini Gourmet / Pub:
         - SottoRicerca(reparto='DISPENSA', query='buns classico mini burger Farino panini burger')
-        - SottoRicerca(reparto='CARNI', query='hamburger fassona piemontese Oberto hamburger maiale nero Patrone')
+        - SottoRicerca(reparto='CARNE', sottocategoria='HAMBURGER', query='hamburger fassona piemontese Oberto hamburger maiale nero Patrone')
         - SottoRicerca(reparto='DISPENSA', query='maionese ketchup senape salsa aioli Biobontà peperone crusco Buongiorno')
         - SottoRicerca(reparto='SALUMI', query='pancetta tesa in conca di marmo Adò pancetta cotta dello Zio Branchi')
         - SottoRicerca(reparto='FORMAGGI', query='formaggio da fondere Crucolo Capriz La Casera')
-        - SottoRicerca(reparto='DISPENSA', query='patatine di montagna con buccia Valle di Gresta')
+        - SottoRicerca(reparto='DISPENSA', sottocategoria='PATATINE', query='patatine di montagna con buccia Valle di Gresta')
       * Cucina toscana / Tagliere toscano:
         - SottoRicerca(reparto='SALUMI', query='finocchiona igp bastardo maremmano salame toscano lardo Franchi Salumi Ado')
-        - SottoRicerca(reparto='FORMAGGI', query='pecorino toscano dop cacio e pepe cremosa san martino Formaggeria Toscana')
+        - SottoRicerca(reparto='FORMAGGI', sottocategoria='PECORINO', query='pecorino toscano dop cacio e pepe cremosa san martino Formaggeria Toscana')
         - SottoRicerca(reparto='DISPENSA', query='anacardi nocciole tartufo crostini Calugi')
       * Cucina pugliese / Tagliere pugliese:
         - SottoRicerca(reparto='SALUMI', query='capocollo di martina franca affumicato pancetta suino nero Salumi Martina Franca')
         - SottoRicerca(reparto='FORMAGGI', query='pallone di gravina provolone pecora caciocavallo burrata La Ghianda Recco')
-        - SottoRicerca(reparto='DISPENSA', query='taralli pugliesi grissini Farino olive bella di cerignola Capuano')
-      * Aperitivo di mare / Tagliere di pesce:
-       - SottoRicerca(reparto='MARE', sottocategoria='Salumi e affettati di mare', query='bresaola tonno mortadella lardo mare Italfish')
-       - SottoRicerca(reparto='MARE', sottocategoria='Tartare e carpacci di mare', query='tartare salmone tonno spada Italfish')
+        - SottoRicerca(reparto='DISPENSA', sottocategoria='OLIVE', query='taralli pugliesi grissini Farino olive bella di cerignola Capuano')
+      * Aperitivo di mare / Tagliere di pesce (la nuova tassonomia non ha una sottocategoria dedicata a "salumi/tartare di mare": lascia sottocategoria vuoto e affidati a reparto='MARE' + query mirata):
+       - SottoRicerca(reparto='MARE', query='bresaola tonno pancetta di tonno mortadella lardo di mare Italfish')
+       - SottoRicerca(reparto='MARE', query='tartare o carpaccio salmone tonno spada crudo Italfish')
      * Dessert monoporzione per ristorazione/pub:
-        - SottoRicerca(reparto='FORMAGGI', sottocategoria='Dessert e cremosi di latte', query='cremoso di bufala terracotta San Salvatore')
-        - SottoRicerca(reparto='GELO', query='gelato artigianale sorbetto Menodiciotto')
+        - SottoRicerca(reparto='GELO', sottocategoria='GELATI DESSERT', query='cremoso di bufala terracotta San Salvatore gelato dessert Menodiciotto')
      * Menu completo o più portate (antipasti, primo, secondo, contorno, dolce):
         - genera sotto-ricerche distinte per ciascuna portata richiesta (es. pasta/primo, secondo, contorno verdure, dolce), rispettando lo stile del locale (pesce o terra).
      * Pinsa gourmet per pub/bistrò/ristorante:
-       - SottoRicerca(reparto='DISPENSA', sottocategoria='Basi per pizza e impasti', query='base pinsa romana precotta Farino')
-       - SottoRicerca(reparto='FORMAGGI', sottocategoria='Burrata e stracciatella', query='burrata stracciatella')
+       - SottoRicerca(reparto='DISPENSA', sottocategoria='BASI PER PIZZA E IMPASTI', query='base pinsa romana precotta Farino')
+       - SottoRicerca(reparto='FORMAGGI', sottocategoria='MOZZARELLE', query='burrata stracciatella fior di latte')
       * Sottoli o antipasti:
-        - SottoRicerca(reparto='DISPENSA', query='carciofi grigliati pomodori secchi sottolio conserve De Giorgi')
+        - SottoRicerca(reparto='DISPENSA', sottocategoria='SOTTOLI', query='carciofi grigliati pomodori secchi sottolio conserve De Giorgi')
         - SottoRicerca(reparto='GELO', query='finger food frittelline pastellati Di Tria')
       * Richieste multiple o composite con più prodotti/materie prime:
         - Se il cliente elenca più ingredienti o categorie eterogenee nella stessa frase (es. "hai un pezzone di tonno e delle olive giganti? mi servono anche delle spezie che legano con il pesce"):
@@ -305,7 +309,7 @@ Rispondi rigorosamente ed esclusivamente con il JSON secondo lo schema fornito."
 
     try:
         risposta = client_genai.models.generate_content(
-            model=MODELLO_GEMINI,
+            model=MODELLO_FALLBACK, # Usa Flash Lite per non bruciare quote 
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.0,
@@ -376,8 +380,9 @@ PAROLE_PRODOTTO_SAFETY = [
     "tonno", "salmone", "bottarga", "polpo", "baccala", "baccalà", "alici", "acciughe", "spada", "pesce spada", "ricci", "riccio",
     "capperi", "cappero", "cucunci",
     "ketchup", "burger", "hamburger", "trita", "fassona",
-    "pomodorini", "datterini", "passata", "pelati",
-    "pasta", "spaghetti", "rigatoni", "orecchiette", "paccheri", "calamarata", "linguine", "fusilli", "risotto", "riso",
+    "pomodorini", "datterini", "passata", "pelati", "sugo", "sughi", "pesto", "ragù", "ragu",
+    "pasta", "spaghetti", "rigatoni", "orecchiette", "paccheri", "calamarata", "linguine", "fusilli", "risotto", "riso", "fresca", "fresche",
+    "legumi", "ceci", "lenticchie", "fagioli", "vegano", "vegana", "vegetariano", "vegetariana",
     "colatura", "cantucci", "cantuccino", "cantuccini", "limoncello", "uova", "uovo", "spalmabile", "spalmabili", "crucoloso",
     "carnaroli", "acquerello", "burro",
     "marmellata", "marmellate", "confettura", "confetture", "mostarda", "mostarde", "composta", "composte", "cugnà", "cugna",
@@ -386,205 +391,147 @@ PAROLE_PRODOTTO_SAFETY = [
 ]
 
 
+# Alias parola-chiave -> sottocategoria/e ufficiali della tassonomia (vedi
+# tassonomia_sofood.py). NIENTE nomi di fornitore qui dentro: questa mappa
+# lega solo linguaggio naturale del cliente a categorie merceologiche
+# ufficiali, quindi resta valida qualunque sia il fornitore che oggi (o in
+# futuro) copre quella categoria a catalogo. Se una parola ha più di una
+# sottocategoria plausibile, si prova la prima e poi le altre finché non si
+# trova qualcosa.
+ALIAS_PAROLA_SOTTOCATEGORIA = {
+    "taralli": ["TARALLI"], "tarallo": ["TARALLI"],
+    "grissini": ["GRISSINI"], "grissino": ["GRISSINI"],
+    "olive": ["OLIVE"], "oliva": ["OLIVE"],
+    "capperi": ["SOTTACETI", "ALTRI CONDIMENTI"], "cappero": ["SOTTACETI", "ALTRI CONDIMENTI"], "cucunci": ["SOTTACETI"],
+    "burger": ["HAMBURGER"], "hamburger": ["HAMBURGER"], "trita": ["HAMBURGER", "MACINATO"], "macinato": ["MACINATO"],
+    "sugo": ["SUGHI PRONTI E BASI"], "sughi": ["SUGHI PRONTI E BASI"],
+    "pesto": ["SALSE/SPALMABILI VEGETALI", "SUGHI PRONTI E BASI"], "ragù": ["SUGHI PRONTI E BASI"], "ragu": ["SUGHI PRONTI E BASI"],
+    "maionese": ["MAIONESE"],
+    "cantucci": ["BISCOTTI TRADIZIONALI"], "cantuccino": ["BISCOTTI TRADIZIONALI"], "cantuccini": ["BISCOTTI TRADIZIONALI"],
+    "biscotti": ["BISCOTTI TRADIZIONALI", "BISCOTTI ALL'UOVO"],
+    "limoncello": ["ALTRI LIQUORI"], "liquore": ["ALTRI LIQUORI"], "liquori": ["ALTRI LIQUORI"],
+    "spalmabile": ["CREME SPALMABILI DOLCI", "PATE' E SPALMABILI SALATI", "SALSE/SPALMABILI VEGETALI"],
+    "spalmabili": ["CREME SPALMABILI DOLCI", "PATE' E SPALMABILI SALATI", "SALSE/SPALMABILI VEGETALI"],
+    "crucoloso": ["CREME SPALMABILI DOLCI", "PATE' E SPALMABILI SALATI"],
+    "riso": ["RISO BIANCO", "RISO PARBOILED", "SPECIALITA' RISO"], "risotto": ["RISO BIANCO"], "carnaroli": ["RISO BIANCO"],
+    "marmellata": ["CONFETTURE/SPALMABILI FRUTTA"], "marmellate": ["CONFETTURE/SPALMABILI FRUTTA"],
+    "confettura": ["CONFETTURE/SPALMABILI FRUTTA"], "confetture": ["CONFETTURE/SPALMABILI FRUTTA"],
+    "mostarda": ["MOSTARDA"], "mostarde": ["MOSTARDA"], "composta": ["MOSTARDA"], "composte": ["MOSTARDA"],
+    "cugnà": ["MOSTARDA"], "cugna": ["MOSTARDA"], "miele": ["MIELE"],
+    "legumi": ["ALTRI LEGUMI/VEGETALI/CEREALI", "FAGIOLI CONSERVATI"], "ceci": ["ALTRI LEGUMI/VEGETALI/CEREALI"],
+    "lenticchie": ["ALTRI LEGUMI/VEGETALI/CEREALI"], "fagioli": ["FAGIOLI CONSERVATI", "ALTRI LEGUMI/VEGETALI/CEREALI"],
+    "dolce": ["PASTICCERIA", "CREME SPALMABILI DOLCI", "SNACK DOLCI", "ALTRI PRODOTTI RICORRENZA"],
+    "dolci": ["PASTICCERIA", "CREME SPALMABILI DOLCI", "SNACK DOLCI", "ALTRI PRODOTTI RICORRENZA"],
+    "dessert": ["GELATI DESSERT", "PASTICCERIA"],
+    "gelato": ["GELATI VASCHETTE", "GELATI DESSERT"], "gelati": ["GELATI VASCHETTE", "GELATI DESSERT"],
+    "sorbetto": ["SORBETTO DA BERE", "GELATI VASCHETTE"], "sorbetti": ["SORBETTO DA BERE"],
+    "birra": ["BIRRE ALCOLICHE"], "birre": ["BIRRE ALCOLICHE"],
+    "pomodorini": ["PELATI E POMODORINI"], "datterini": ["PELATI E POMODORINI"],
+    "passata": ["PASSATA DI POMODORO"], "pelati": ["PELATI E POMODORINI"], "polpa": ["POLPA DI POMODORO"],
+    "pasta": ["PASTA DI SEMOLA", "PASTA ALL'UOVO", "PASTA INT/FAR/KAMUT/LEG/MAIS"],
+    "salmone": ["SALMONE FRESCO CONFEZIONATO"],
+    "parmigiano": ["GRANA E SIMILI"], "grana": ["GRANA E SIMILI"], "pecorino": ["PECORINO"],
+    "ricotta": ["RICOTTA"], "gorgonzola": ["GORGONZOLA"],
+    "mozzarella": ["MOZZARELLE", "BUFALA"], "bufala": ["BUFALA"],
+    "salame": ["SALAME", "SALAMI"], "mortadella": ["MORTADELLA"], "pancetta": ["PANCETTA"],
+    "prosciutto": ["PROSC CRUDO", "PROSC COTTO", "PROSCIUTTO"], "bresaola": ["BRESAOLA"],
+    "focaccia": ["SPECIALITA' MORBIDE"], "friselle": ["SPECIALITA' CROCCANTI"],
+    "pane": ["SPECIALITA' MORBIDE", "SPECIALITA' CROCCANTI", "PANINI"], "piadine": ["PIADINE"], "panini": ["PANINI"],
+    "nocciole": ["FRUTTA SECCA SENZA GUSCIO"], "nocciola": ["FRUTTA SECCA SENZA GUSCIO"],
+    "anacardi": ["FRUTTA SECCA SENZA GUSCIO"], "arachidi": ["FRUTTA SECCA SENZA GUSCIO"],
+    "patatine": ["PATATINE"], "aceto": ["ACETO"], "olio": ["OLIO EXTRAVERGINE DI OLIVA", "OLIO DI SEMI"],
+}
+
+_ESCLUSIONI_QUALITA_SAFETY = {
+    "OLIVE": ("sugo", "paté", "pate", "candit", "granell", "pastella", "crema", "carciof"),
+}
+
+
 def esegui_safety_net_prodotti(user_query: str, contesto_testuale: str, collezione, indice_codici: dict, embedder, indice_fornitori: dict, indice_testuale: list = None) -> str:
-    """Se l'utente cita esplicitamente un prodotto o un brand/fornitore a catalogo ma il contesto RAG non ne contiene alcuno,
-    recupera referenze mirate tramite match lessicale preciso sul nome prodotto o fornitore per evitare che Nino
-    neghi falsamente la loro esistenza."""
+    """Se l'utente cita esplicitamente un prodotto/brand a catalogo, o una
+    categoria merceologica (taralli, olive, sugo...), ma il contesto RAG non
+    ne contiene traccia, recupera referenze mirate per evitare che Nino
+    neghi falsamente la disponibilità di qualcosa che è invece a catalogo.
+
+    A differenza della versione precedente, qui NON compaiono nomi di
+    fornitore hardcoded per ciascuna parola: la ricerca è vincolata dalla
+    sottocategoria ufficiale (ALIAS_PAROLA_SOTTOCATEGORIA, sopra), che è
+    l'unica fonte di verità su "quale categoria" — "quale fornitore la copre
+    oggi" lo decide sempre e solo la ricerca a catalogo. Aggiungere o
+    togliere un fornitore da una categoria non richiede toccare questa
+    funzione."""
     query_lower = user_query.lower()
     contesto_lower = contesto_testuale.lower()
 
     prodotti_aggiuntivi = []
     id_gia_inclusi = set()
 
-    # 1. Controllo sistematico fornitori/brand a catalogo citati nella query
+    # 1. Fornitori/brand a catalogo citati esplicitamente nella query
     if indice_fornitori:
         for forn_chiave, id_list in indice_fornitori.items():
             if len(forn_chiave) < 4:
                 continue
-            if re.search(r"\b" + re.escape(forn_chiave) + r"\b", query_lower):
-                if forn_chiave not in contesto_lower:
-                    extra_forn = trova_match_per_fornitore(forn_chiave, indice_fornitori, collezione, max_risultati=4)
-                    for r in extra_forn:
-                        if r["id"] not in id_gia_inclusi:
-                            id_gia_inclusi.add(r["id"])
-                            prodotti_aggiuntivi.append(r)
+            if re.search(r"\b" + re.escape(forn_chiave) + r"\b", query_lower) and forn_chiave not in contesto_lower:
+                for r in trova_match_per_fornitore(forn_chiave, indice_fornitori, collezione, max_risultati=4):
+                    if r["id"] not in id_gia_inclusi:
+                        id_gia_inclusi.add(r["id"])
+                        prodotti_aggiuntivi.append(r)
 
-    # 2. Controllo parole chiave specifiche
+    # 2. Categorie merceologiche citate ma assenti dal contesto
     for parola in PAROLE_PRODOTTO_SAFETY:
-        parola_in_query = bool(re.search(r"\b" + re.escape(parola) + r"\b", query_lower))
-        if not parola_in_query:
+        if not re.search(r"\b" + re.escape(parola) + r"\b", query_lower):
             continue
 
-        if parola in ["olive", "oliva"]:
-            # Verifica se nel contesto c'è un'oliva da tavola autentica (non crema/paté o salsa)
-            manca_nel_contesto = not bool(re.search(r"(?:bella di cerignola|baresan|leccin|taggiasch|peranzana|kalamata|olive verdi|olive schiacciate)", contesto_lower))
-        elif parola in ["taralli", "tarallo", "grissini", "grissino"]:
-            manca_nel_contesto = not bool(re.search(r"(?:tarall|grissin|carasau)", contesto_lower))
-        elif parola in ["capperi", "cappero", "cucunci"]:
-            manca_nel_contesto = not bool(re.search(r"(?:capper|cucunc|pantelleria)", contesto_lower))
-        elif parola in ["ketchup"]:
-            manca_nel_contesto = not bool(re.search(r"(?:ketchup|kechup)", contesto_lower))
-        elif parola in ["burger", "hamburger", "trita"]:
-            manca_nel_contesto = not bool(re.search(r"(?:burger|hamburger|buns|trita)", contesto_lower))
-        elif parola in ["colatura"]:
-            manca_nel_contesto = not bool(re.search(r"colatura", contesto_lower))
-        elif parola in ["cantucci", "cantuccino", "cantuccini"]:
-            manca_nel_contesto = not bool(re.search(r"(?:cantucc|lunardi|biscotti di prato)", contesto_lower))
-        elif parola in ["limoncello"]:
-            manca_nel_contesto = not bool(re.search(r"limoncello", contesto_lower))
-        elif parola in ["uova", "uovo"]:
-            manca_nel_contesto = not bool(re.search(r"scudellaro", contesto_lower))
-        elif parola in ["spalmabile", "spalmabili", "crucoloso"]:
-            manca_nel_contesto = not bool(re.search(r"crucoloso", contesto_lower))
-        elif parola in ["carnaroli", "acquerello", "burro"]:
-            manca_nel_contesto = not bool(re.search(r"(?:carnaroli|acquerello|burro)", contesto_lower))
-        elif parola in ["marmellata", "marmellate", "confettura", "confetture", "mostarda", "mostarde", "composta", "composte"]:
-            manca_nel_contesto = not bool(re.search(r"(?:confettur|marmellat|mostard|compost|mongetto)", contesto_lower))
-        elif parola in ["dolce", "dolci", "dessert", "fine pasto", "tiramisù", "tiramisu", "cremoso", "cremosi", "gelato", "gelati", "sorbetto", "sorbetti", "babà", "baba"]:
-            manca_nel_contesto = not bool(re.search(r"(?:san salvatore|cremoso|dessert|menodiciotto|gelato|sorbetto|babà|baba|cantucc|lunardi)", contesto_lower))
-        else:
-            manca_nel_contesto = parola not in contesto_lower
+        sottocategorie_candidate = ALIAS_PAROLA_SOTTOCATEGORIA.get(parola)
+        manca_nel_contesto = parola not in contesto_lower and not (
+            sottocategorie_candidate and any(sc.lower() in contesto_lower for sc in sottocategorie_candidate)
+        )
+        if not manca_nel_contesto:
+            continue
 
-        if manca_nel_contesto:
-            if parola in ["olive", "oliva"]:
+        trovati_per_parola = []
+        if sottocategorie_candidate:
+            for sc in sottocategorie_candidate:
                 extra = cerca_prodotti(
-                    collezione, indice_codici, embedder, "olive da tavola in salamoia",
-                    n_risultati=4, indice_fornitori=indice_fornitori, filtro_categoria="Dispensa"
+                    collezione, indice_codici, embedder, parola,
+                    n_risultati=4, indice_fornitori=indice_fornitori,
+                    filtro_sottocategoria=sc,
                 )
+                esclusioni = _ESCLUSIONI_QUALITA_SAFETY.get(sc, ())
                 for r in extra:
                     doc_p = r["document"].splitlines()[0].lower() if r.get("document") else ""
-                    if "oliv" in doc_p and not any(k in doc_p for k in ["sugo", "paté", "pate", "candit", "granell", "pastella", "crema", "carciof"]):
-                        if r["id"] not in id_gia_inclusi:
-                            id_gia_inclusi.add(r["id"])
-                            prodotti_aggiuntivi.append(r)
-            elif parola in ["capperi", "cappero", "cucunci"]:
-                extra = cerca_prodotti(
-                    collezione, indice_codici, embedder, "capperi di Pantelleria IGP al sale cucunci La Nicchia",
-                    n_risultati=4, indice_fornitori=indice_fornitori, filtro_categoria="Dispensa"
-                )
-                for r in extra:
-                    if r["id"] not in id_gia_inclusi:
-                        id_gia_inclusi.add(r["id"])
-                        prodotti_aggiuntivi.append(r)
-            elif parola in ["ketchup"]:
-                extra = cerca_prodotti(
-                    collezione, indice_codici, embedder, "ketchup biologico Biobontà",
-                    n_risultati=3, indice_fornitori=indice_fornitori, filtro_categoria="Dispensa"
-                )
-                for r in extra:
-                    if r["id"] not in id_gia_inclusi:
-                        id_gia_inclusi.add(r["id"])
-                        prodotti_aggiuntivi.append(r)
-            elif parola in ["burger", "hamburger", "trita"]:
-                extra = cerca_prodotti(
-                    collezione, indice_codici, embedder, "buns classico Farino hamburger fassona Oberto",
-                    n_risultati=4, indice_fornitori=indice_fornitori
-                )
-                for r in extra:
-                    if r["id"] not in id_gia_inclusi:
-                        id_gia_inclusi.add(r["id"])
-                        prodotti_aggiuntivi.append(r)
-            elif parola in ["marmellata", "marmellate", "confettura", "confetture", "mostarda", "mostarde", "composta", "composte"]:
-                extra = cerca_prodotti(
-                    collezione, indice_codici, embedder, "confettura marmellata mostarda composte Il Mongetto",
-                    n_risultati=6, indice_fornitori=indice_fornitori, filtro_categoria="Dispensa"
-                )
-                for r in extra:
-                    doc_p = r["document"].splitlines()[0].lower() if r.get("document") else ""
-                    if any(k in doc_p for k in ["confettur", "marmellat", "mostard", "compost"]):
-                        if r["id"] not in id_gia_inclusi:
-                            id_gia_inclusi.add(r["id"])
-                            prodotti_aggiuntivi.append(r)
-            elif parola in ["colatura"]:
-                extra = cerca_prodotti(
-                    collezione, indice_codici, embedder, "colatura di alici artigianale Delfino Conserve Gentile",
-                    n_risultati=3, indice_fornitori=indice_fornitori
-                )
-                for r in extra:
-                    if "colatura" in (r.get("document", "") + " " + str(r.get("metadata", {}))).lower():
-                        if r["id"] not in id_gia_inclusi:
-                            id_gia_inclusi.add(r["id"])
-                            prodotti_aggiuntivi.append(r)
-            elif parola in ["cantucci", "cantuccino", "cantuccini"]:
-                extra = cerca_prodotti(
-                    collezione, indice_codici, embedder, "cantucci biscotti di prato Fratelli Lunardi",
-                    n_risultati=4, indice_fornitori=indice_fornitori
-                )
-                for r in extra:
-                    if "lunardi" in str(r["metadata"].get("nome_fornitore", "")).lower():
-                        if r["id"] not in id_gia_inclusi:
-                            id_gia_inclusi.add(r["id"])
-                            prodotti_aggiuntivi.append(r)
-            elif parola in ["limoncello"]:
-                extra = cerca_prodotti(
-                    collezione, indice_codici, embedder, "limoncello tradizionale Il Convento Smeralda",
-                    n_risultati=3, indice_fornitori=indice_fornitori
-                )
-                for r in extra:
-                    if "limoncello" in (r.get("document", "") + " " + str(r.get("metadata", {}))).lower():
-                        if r["id"] not in id_gia_inclusi:
-                            id_gia_inclusi.add(r["id"])
-                            prodotti_aggiuntivi.append(r)
-            elif parola in ["uova", "uovo"]:
-                extra = cerca_prodotti(
-                    collezione, indice_codici, embedder, "uova biologiche Scudellaro",
-                    n_risultati=3, indice_fornitori=indice_fornitori
-                )
-                for r in extra:
-                    if "scudellaro" in str(r["metadata"].get("nome_fornitore", "")).lower() and "uov" in r.get("document", "").lower():
-                        if r["id"] not in id_gia_inclusi:
-                            id_gia_inclusi.add(r["id"])
-                            prodotti_aggiuntivi.append(r)
-            elif parola in ["spalmabile", "spalmabili", "crucoloso"]:
-                extra = cerca_prodotti(
-                    collezione, indice_codici, embedder, "crucoloso crema formaggio spalmabile Crucolo",
-                    n_risultati=3, indice_fornitori=indice_fornitori
-                )
-                for r in extra:
-                    if "crucolo" in str(r["metadata"].get("nome_fornitore", "")).lower():
-                        if r["id"] not in id_gia_inclusi:
-                            id_gia_inclusi.add(r["id"])
-                            prodotti_aggiuntivi.append(r)
-            elif parola in ["carnaroli", "acquerello", "burro"]:
-                extra = cerca_prodotti(
-                    collezione, indice_codici, embedder, "riso carnaroli acquerello burro nobile montanari gruzza la casera",
-                    n_risultati=4, indice_fornitori=indice_fornitori
-                )
-                for r in extra:
-                    doc_l = r.get("document", "").lower()
-                    if any(k in doc_l for k in ["carnaroli", "acquerello", "burro"]):
-                        if r["id"] not in id_gia_inclusi:
-                            id_gia_inclusi.add(r["id"])
-                            prodotti_aggiuntivi.append(r)
-            elif parola in ["dolce", "dolci", "dessert", "fine pasto", "tiramisù", "tiramisu", "cremoso", "cremosi", "gelato", "gelati", "sorbetto", "sorbetti", "babà", "baba"]:
-                extra_dolci = cerca_prodotti(
-                    collezione, indice_codici, embedder, "cremoso di bufala dessert San Salvatore terracotta baba al rum Il Convento cantucci Lunardi",
-                    n_risultati=4, indice_fornitori=indice_fornitori
-                )
-                extra_gelo = []
-                if not any(k in query_lower for k in ["bottega", "cantucc", "biscott", "vasetto", "scaffale"]):
-                    extra_gelo = cerca_prodotti(
-                        collezione, indice_codici, embedder, "gelato artigianale sorbetto Menodiciotto",
-                        n_risultati=2, indice_fornitori=indice_fornitori, filtro_reparto="GELO"
-                    )
-                for r in extra_dolci + extra_gelo:
-                    if r["id"] not in id_gia_inclusi:
-                        id_gia_inclusi.add(r["id"])
-                        prodotti_aggiuntivi.append(r)
-            elif indice_testuale:
-                match_less = trova_match_lessicale(parola, indice_testuale, max_risultati=3)
-                for r in match_less:
-                    if r["id"] not in id_gia_inclusi:
-                        id_gia_inclusi.add(r["id"])
-                        prodotti_aggiuntivi.append(r)
-            else:
-                extra = cerca_prodotti(
-                    collezione, indice_codici, embedder, parola, n_risultati=3, indice_fornitori=indice_fornitori
-                )
-                for r in extra:
-                    if r["id"] not in id_gia_inclusi:
-                        id_gia_inclusi.add(r["id"])
-                        prodotti_aggiuntivi.append(r)
+                    if esclusioni and any(w in doc_p for w in esclusioni):
+                        continue
+                    trovati_per_parola.append(r)
+                if trovati_per_parola:
+                    break  # la prima sottocategoria che produce risultati basta
+
+        if not trovati_per_parola and indice_testuale:
+            trovati_per_parola = trova_match_lessicale(parola, indice_testuale, max_risultati=3)
+
+        if not trovati_per_parola:
+            trovati_per_parola = cerca_prodotti(
+                collezione, indice_codici, embedder, parola, n_risultati=3, indice_fornitori=indice_fornitori
+            )
+
+        for r in trovati_per_parola:
+            if r["id"] not in id_gia_inclusi:
+                id_gia_inclusi.add(r["id"])
+                prodotti_aggiuntivi.append(r)
+
+        # Caso "vegano/vegetariano": oltre alla parola stessa, garantisci
+        # sempre almeno qualche alternativa proteica/verdura strutturalmente
+        # marcata SI nei campi dietetici (non per nome di fornitore).
+        if parola in ("vegano", "vegana", "vegetariano", "vegetariana"):
+            extra_dieta = cerca_prodotti(
+                collezione, indice_codici, embedder, "legumi e verdure pronte per secondi piatti",
+                n_risultati=4, indice_fornitori=indice_fornitori,
+                filtro_dieta="vegano" if "vegan" in parola else "vegetariano",
+            )
+            for r in extra_dieta:
+                if r["id"] not in id_gia_inclusi:
+                    id_gia_inclusi.add(r["id"])
+                    prodotti_aggiuntivi.append(r)
 
     if not prodotti_aggiuntivi:
         return contesto_testuale
@@ -633,50 +580,46 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
     # Non deve MAI introdurre marchi o fornitori che il cliente non ha nominato:
     # farlo (come in una versione precedente di questo prompt) forzava sempre
     # gli stessi fornitori nei risultati, indipendentemente dalla richiesta reale.
-    prompt_riscrittura = f"""Sei un estrattore di chiavi di ricerca per un database di prodotti alimentari.
-
-Ecco gli ultimi scambi della conversazione tra il cliente e l'assistente Nino:
-{contesto_conversazione}
-
-Il cliente ha appena scritto:
-"{user_query_clean}"
-
-COMPITO:
-- Se il cliente chiede "un altro", "un'alternativa", "un altro primo", "un altro secondo", "qualcos'altro", "cambiamo piatto" o simili, e nel messaggio precedente di Nino era stato proposto un piatto, riformula la richiesta specificando che cerca un'alternativa per quella tipologia/portata (es. se Nino ha proposto uno spaghetto ai ricci o uno scialatiello al nero di seppia, riformula come "alternativa primo piatto di mare", "un altro primo piatto di pesce").
-- REGOLA CRUCIALE PER VARIANTI E PRONOMI DI PORTATA:
-  Se il cliente chiede una variante o un nuovo piatto usando pronomi o formule ellittiche (es. "fammene una con...", "una con...", "uno con...", "fammene uno con...", "e uno con...", "e una con...", "un altro con...", "un'altra con...", "e con il pesce?"):
-  DEVI TASSATIVAMENTE MANTENERE la tipologia/portata dell'ultimo piatto proposto da Nino!
-  * Se prima Nino ha proposto una PIZZA e il cliente scrive "fammene una con anche il capocollo", riformula SEMPRE includendo esplicitamente "pizza" (es. "pizza con capocollo"). NON passare MAI alla pasta!
-  * Se prima Nino ha proposto un RISOTTO e il cliente scrive "uno con il pesce?", riformula SEMPRE includendo esplicitamente "risotto" (es. "risotto con pesce" o "risotto di mare"). NON passare a secondi di pesce!
-  * Se prima Nino ha proposto un PANINO/BURGER e il cliente scrive "e uno più semplice" o "uno con il pollo", riformula SEMPRE includendo esplicitamente "panino burger".
-- REGOLA FERREA PER FORMATI GRANDI E ANAFORE ("hai formati grandi di questi?", "in che formati ci sono questi?", "ci sono confezioni più grandi?", "e per il bar/ristorante in grandi formati?"):
-  Se il cliente chiede formati grandi, varianti horeca, catering, latte o secchielli di "questi", "di questi prodotti", o si riferisce agli ultimi prodotti proposti, DEVI RIFERIRTI TASSATIVAMENTE ED ESCLUSIVAMENTE AI PRODOTTI NOMINATI DA NINO NEL SUO ULTIMO MESSAGGIO! (Es. se Nino ha proposto taralli Farino, olive Capuano e anacardi Calugi per un aperitivo, riformula la query identificando i formati grandi di QUEI PRODOTTI ESATTI: "formati grandi horeca catering taralli Farino olive Capuano vaso 3100ml anacardi Calugi bar"). È SEVERAMENTE VIETATO pescare prodotti nominati 3 o 4 messaggi prima (come babà, percoche, dolci o conserve) se Nino nell'ultimo messaggio parlava di snack/aperitivi!
-- Se il cliente chiede informazioni su formati, grammature, pezzature, confezioni o dettagli di prodotti già nominati (es. "in che formati li avete?", "ci sta, in che formati avete questi ingredienti", "quanto pesa la confezione?"), NON inventare nuovi piatti o marchi: mantieni il riferimento esatto a "formati e confezioni" dei prodotti citati da Nino.
-- Se il cliente esprime la volontà di fare o preparare un hamburger/burger (es. "voglio fare un hamburger", "proposte burger"), riformula come "hamburger gourmet buns farino fassona formaggio fondente salse", a meno che non specifichi esplicitamente "al piatto".
-- Se il cliente usa pronomi o riferimenti impliciti (es. "questi", "quelli", "fammeli vedere", "quello da 500g", "la prima opzione", "altri?", "sì"/"si" a una proposta precedente), riformula in una query di ricerca autonoma e specifica, usando i nomi di prodotto o l'argomento realmente menzionati nel messaggio precedente di Nino — NON aggiungere marchi, fornitori o prodotti che il cliente e Nino non hanno già nominato in questa conversazione.
-- Se il cliente usa incitamenti o conferme come "fallo", "procedi", "vai", "fai tu", "ok fallo", "proponili", interpreta l'azione richiesta ricollegandoti a ciò che Nino ha appena menzionato o lasciato in sospeso nel messaggio precedente (es. se Nino ha detto che mancavano primo, secondo e contorno, riformula in "primo piatto di mare, secondo piatto di mare, contorno").
-- Se il cliente chiede "e un dolce?", "dolci?", "dessert?", riformula sempre come "dessert dolci fine pasto cremoso gelato".
-- Se il cliente menziona un codice articolo, mantienilo esatto nella chiave.
-- Se il cliente fa una richiesta già autonoma e chiara, restituiscila invariata (o quasi).
-- Se ci sono più argomenti distinti, separali con virgola.
-
-REGOLA ASSOLUTA: niente convenevoli, nessuna spiegazione, solo la query riformulata."""
-
+        # 5-NODE ARCHITECTURE: NODO 1 e NODO 2 (Intent & Decomposer)
     for tentat in range(3):
         try:
-            risposta_riscrittura = client_genai.models.generate_content(
-                model=MODELLO_GEMINI,
-                contents=prompt_riscrittura,
-                config=types.GenerateContentConfig(temperature=0.0)
-            )
-            testo_per_ricerca = risposta_riscrittura.text.strip()
-            print(f"\n[DEBUG RAG] Query Originale: '{user_query}' -> Query Riscritta: '{testo_per_ricerca}'\n")
+            # 1. Intent Classification
+            intent_res = classify_intent(user_query_clean, contesto_conversazione)
+            
+            # 2. Decomposer
+            tree = decompose_domain(user_query_clean, contesto_conversazione)
+            
+            # Map DecomposedTree to legacy piano_ricerca format for backward compatibility in retrieval_utils
+            piano_ricerca = {
+                "intento": "tagliere_o_ricetta" if intent_res.intent == "TAGLIERE_O_RICETTA" else "ricerca_catalogo",
+                "componenti": []
+            }
+            for slot in tree.slots:
+                piano_ricerca["componenti"].append({
+                    "ruolo": slot.macro_family.lower(),
+                    "quantita_target": slot.quantity,
+                    "sottocategoria_forzata": slot.forced_subcategory,
+                    "query_pulita": " ".join(slot.constraints.must_have),
+                    "esclusioni": slot.constraints.must_not_have
+                })
+                
+            queries = []
+            for comp in piano_ricerca.get("componenti", []):
+                q = comp.get("query_pulita")
+                if q:
+                    queries.append(q)
+            testo_per_ricerca = " ".join(queries) if queries else user_query_clean
+            
+            print(f"\\n[DEBUG RAG] Decomposer JSON generato: {piano_ricerca}\\n")
             break
         except Exception as e:
+            import time
             if ("429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)) and tentat < 2:
                 time.sleep(4 * (tentat + 1))
                 continue
             print(f"[ATTENZIONE] Riscrittura query fallita, uso l'originale. Errore: {e}")
+            testo_per_ricerca = user_query_clean
+            piano_ricerca = None
             break
 
     # ANALISI SEMANTICA, PROFILAZIONE E DECOMPOSIZIONE STRUTTURATA (AI Engineer pipeline)
@@ -692,13 +635,26 @@ REGOLA ASSOLUTA: niente convenevoli, nessuna spiegazione, solo la query riformul
     if analisi.profilo.citta:
         stato["citta"] = analisi.profilo.citta
 
-    print(f"[DEBUG PROFILO] Tipo Locale: {stato.get('tipo_locale')} | Stile: {stato.get('stile_cucina')} | Dieta: {stato.get('filtro_dieta')} | No Affettatrice: {stato.get('senza_affettatrice')} | Città: {stato.get('citta')}")
+    query_bassa_combinata = f"{user_query_clean} {testo_per_ricerca}".lower()
+
+    # Riconoscimento esplicito stile/locale di mare
+    if any(k in query_bassa_combinata for k in ["locale mare", "locale di mare", "ristorante mare", "ristorante di mare", "ristorante di pesce", "cucina di mare", "cucina marinara", "locale marinaro"]):
+        stato["stile_cucina"] = "mare"
+        if not stato.get("tipo_locale"):
+            stato["tipo_locale"] = "ristorante di mare"
+
+    # Canale HORECA/RETAIL dedotto dal tipo di locale (vedi profilazione_locale.py):
+    # bar/pub/ristorante/pizzeria... -> horeca (formati grandi/da lavorazione);
+    # bottega/negozio/gastronomia/supermercato... -> retail (formati da rivendita).
+    # È un BOOST di ordinamento nella ricerca, mai un'esclusione: se per un
+    # prodotto esiste solo un formato, resta comunque proponibile a chiunque.
+    stato["canale_locale"] = rileva_canale_locale(stato.get("tipo_locale"))
+
+    print(f"[DEBUG PROFILO] Tipo Locale: {stato.get('tipo_locale')} | Canale: {stato.get('canale_locale')} | Stile: {stato.get('stile_cucina')} | Dieta: {stato.get('filtro_dieta')} | No Affettatrice: {stato.get('senza_affettatrice')} | Città: {stato.get('citta')}")
     print(f"[DEBUG INTENT] Richiede Composizione: {analisi.richiede_composizione} ({analisi.tipo_composizione})")
 
     stato.setdefault("ultimo_piatto_proposto", None)
     stato.setdefault("ricette_mostrate", set())
-
-    query_bassa_combinata = f"{user_query_clean} {testo_per_ricerca}".lower()
 
     # Riconoscimento se la query contiene parole di nuova richiesta o congiunzioni che introducono una variante/nuovo piatto
     ha_parole_nuova_richiesta = any(k in query_bassa_combinata for k in [
@@ -749,7 +705,7 @@ REGOLA ASSOLUTA: niente convenevoli, nessuna spiegazione, solo la query riformul
     if usa_ricettario:
         try:
             ha_gia_prodotti = len(stato.get("prodotti_mostrati", set())) > 0
-            target_salumi, target_formaggi = estrai_conteggi_tagliere(query_bassa_combinata, ha_gia_prodotti=ha_gia_prodotti)
+            target_salumi, target_formaggi = None, None
 
             # Determinazione categoria/portata ereditata dal piatto precedente se la query è anaforica o di variante
             categoria_ereditata = None
@@ -800,6 +756,7 @@ REGOLA ASSOLUTA: niente convenevoli, nessuna spiegazione, solo la query riformul
                 ricette_escluse=stato.get("ricette_mostrate", set()),
                 categoria_ereditata=categoria_ereditata,
                 piatto_precedente_nome=piatto_precedente_nome,
+                piano_ricerca=piano_ricerca,
             )
         except Exception as e:
             print(f"[ATTENZIONE] Composizione da ricettario fallita ({e}), fallback su RAG generico.")
@@ -809,11 +766,14 @@ REGOLA ASSOLUTA: niente convenevoli, nessuna spiegazione, solo la query riformul
         tmpl = contesto_ricetta["template"]
         print(f"[DEBUG RICETTARIO] Proposta trovata: {tmpl['nome_piatto']}")
         contesto_testuale = costruisci_contesto_ricetta_testuale(contesto_ricetta)
+        record_prodotti = []
         for s in contesto_ricetta.get("slot", []):
             if s.get("esito") == "TROVATO" and s.get("prodotto_trovato"):
                 ids_da_tracciare.append(s["prodotto_trovato"]["id"])
+                record_prodotti.append(s["prodotto_trovato"])
             elif s.get("esito") == "SOSTITUITO" and s.get("sostituto_id"):
                 ids_da_tracciare.append(s["sostituto_id"])
+                # se abbiamo il dizionario sostituto_trovato potremmo appenderlo, ma id_da_tracciare basta
 
         # MACCHINA A STATI: Registra il piatto proposto ed esce dal ricettario per le domande successive
         stato["ultimo_piatto_proposto"] = {
@@ -870,20 +830,17 @@ REGOLA ASSOLUTA: niente convenevoli, nessuna spiegazione, solo la query riformul
                     id_visti.add(r["id"])
                     record_prodotti.append(r)
 
-            # 2b. Match su Cluster Regionali / Geografici (Spagna, Toscana, Puglia, Piemonte, Trentino, Emilia)
+            # 2b. Match su Cluster Regionali / Geografici (Spagna, Toscana, Puglia,
+            # Piemonte, Trentino, Emilia, Sardegna...). L'elenco fornitori per
+            # regione arriva SEMPRE da fornitori_config.py: aggiungere/togliere
+            # un fornitore da un cluster si fa solo lì, non qui.
             regione_rilevata = rileva_cluster_regionale(query_bassa_combinata)
             cluster_attivo_fornitori = set()
-            if regione_rilevata and regione_rilevata in CLUSTER_REGIONALI:
-                cfg_reg = CLUSTER_REGIONALI[regione_rilevata]
-                cluster_attivo_fornitori = set(
-                    cfg_reg.get("salumi_fornitori", [])
-                    + cfg_reg.get("formaggi_fornitori", [])
-                    + cfg_reg.get("mare_fornitori", [])
-                    + cfg_reg.get("snack_fornitori", [])
-                    + cfg_reg.get("mostarde_fornitori", [])
-                    + cfg_reg.get("sottoli_fornitori", [])
-                    + cfg_reg.get("contorni_fornitori", [])
-                )
+            if regione_rilevata:
+                for ruolo_possibile in ("salumi", "formaggi", "mare", "pane", "olive",
+                                         "sottoli", "mostarde_confetture", "snack_secco", "contorni"):
+                    for slug in elenco_fornitori_per_ruolo_regione(ruolo_possibile, regione_rilevata):
+                        cluster_attivo_fornitori.update(FORNITORI[slug]["nomi_match"])
                 for f_nome in cluster_attivo_fornitori:
                     prodotti_forn = trova_match_per_fornitore(f_nome, indice_fornitori, collezione, max_risultati=4)
                     for r in prodotti_forn:
@@ -910,7 +867,7 @@ REGOLA ASSOLUTA: niente convenevoli, nessuna spiegazione, solo la query riformul
             for sr in sotto_ricerche:
                 filtro_cat = CATEGORIE_CATALOGO_MAP.get(sr.categoria.lower().strip()) if sr.categoria else None
                 filtro_rep = sr.reparto.strip().upper() if sr.reparto else None
-                filtro_sotto = sr.sottocategoria.strip() if sr.sottocategoria else None
+                filtro_sotto = sr.sottocategoria.strip().upper() if sr.sottocategoria else None
 
                 risultati_parziali = cerca_prodotti(
                     collezione, indice_codici_prodotto, embedder, sr.query,
@@ -921,13 +878,17 @@ REGOLA ASSOLUTA: niente convenevoli, nessuna spiegazione, solo la query riformul
                     filtro_sottocategoria=filtro_sotto,
                     tipo_locale=stato.get("tipo_locale"),
                     filtro_dieta=stato.get("filtro_dieta"),
+                    canale_locale=stato.get("canale_locale"),
                 )
                 if any(w in query_bassa_combinata for w in ["finger food", "frittellin", "pastellat", "aperitiv", "snack", "caldo", "caldi", "fritti", "fritto"]) and not any(w in query_bassa_combinata for w in ["gelato", "sorbetto", "dolce", "dessert"]):
+                    # Un finger food "caldo" non può essere un gelato: esclusione per
+                    # categoria merceologica (sottocategoria/reparto), non per nome
+                    # di fornitore, così vale per qualunque fornitore di gelati.
                     risultati_parziali = [
                         r for r in risultati_parziali
-                        if "menodiciotto" not in str(r["metadata"].get("nome_fornitore", "")).lower()
-                        and "gelato" not in str(r["metadata"].get("sottocategoria", "")).lower()
+                        if "gelato" not in str(r["metadata"].get("sottocategoria", "")).lower()
                         and "gelato" not in str(r["metadata"].get("categoria_tassonomia", "")).lower()
+                        and str(r["metadata"].get("reparto", "")).upper() != "GELO"
                     ]
                 for r in risultati_parziali:
                     if r["id"] not in id_visti:
@@ -989,7 +950,7 @@ REGOLA ASSOLUTA: niente convenevoli, nessuna spiegazione, solo la query riformul
                 for r in record_prodotti:
                     forn_r = str(r["metadata"].get("nome_fornitore", "")).lower()
                     rep_r = str(r["metadata"].get("reparto", "")).upper()
-                    if any(fv in forn_r for fv in FORNITORI_NON_VEG) or rep_r in ["CARNI", "SALUMI", "FORMAGGI", "MARE"]:
+                    if any(fv in forn_r for fv in FORNITORI_NON_VEG) or rep_r in ["CARNE", "SALUMI", "FORMAGGI", "MARE"]:
                         continue
                     doc_r = r.get("document", "").lower()
                     if any(pv in doc_r for pv in PAROLE_NON_VEG):
@@ -1029,7 +990,16 @@ REGOLA ASSOLUTA: niente convenevoli, nessuna spiegazione, solo la query riformul
     # Creazione prompt finale
     prompt_di_sistema_completo = SYSTEM_PROMPT_NINO + carica_memoria_dinamica()
 
-    prompt_finale = f"""
+    info_profilo = []
+    if stato.get("tipo_locale"):
+        info_profilo.append(f"- Tipo locale: {stato['tipo_locale']}")
+    if stato.get("stile_cucina"):
+        info_profilo.append(f"- Stile cucina: {stato['stile_cucina']}")
+    if stato.get("filtro_dieta"):
+        info_profilo.append(f"- Dieta / Vincolo alimentare: {stato['filtro_dieta']}")
+    blocco_profilo = "\n    [PROFILO CLIENTE MEMORIZZATO]\n    " + "\n    ".join(info_profilo) + "\n" if info_profilo else ""
+
+    prompt_finale = f"""{blocco_profilo}
     [DATI RAG ESTRATTI DAL CATALOGO - USA QUESTE INFO PER RISPONDERE]
     {contesto_testuale}
 
@@ -1041,89 +1011,119 @@ REGOLA ASSOLUTA: niente convenevoli, nessuna spiegazione, solo la query riformul
     if len(stato["storico"]) > max_messaggi:
         stato["storico"] = stato["storico"][-max_messaggi:]
 
-    # Modello da usare per le risposte utente: Gemini 3.5 Flash con fallback su Gemini 3.5 Flash Lite
+    # Modello da usare per le risposte utente: Gemini 3.5 Flash-Lite con fallback su Gemini 3.7 Flash
     modello_da_usare = os.getenv("MODELLO_RISPOSTA", MODELLO_PRINCIPALE)
 
-    # Generazione risposta
-    chat_session = client_genai.chats.create(
-        model=modello_da_usare,
-        config=types.GenerateContentConfig(system_instruction=prompt_di_sistema_completo, temperature=0.3),
-        history=stato["storico"]
-    )
-
-    response = None
-    for tentat in range(3):
-        try:
-            response = chat_session.send_message(prompt_finale)
-            break
-        except Exception as e:
-            err_msg = str(e)
-            if any(k in err_msg for k in ["429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE"]):
-                # Se il modello selezionato fallisce per quota o indisponibilità temporanea, fallback immediato su MODELLO_GEMINI
-                if modello_da_usare != MODELLO_GEMINI:
-                    print(f"[ATTENZIONE] Fallback da {modello_da_usare} a {MODELLO_GEMINI} per errore: {err_msg[:80]}")
-                    modello_da_usare = MODELLO_GEMINI
-                    try:
-                        chat_session = client_genai.chats.create(
-                            model=MODELLO_GEMINI,
-                            config=types.GenerateContentConfig(system_instruction=prompt_di_sistema_completo, temperature=0.3),
-                            history=stato["storico"]
-                        )
-                        response = chat_session.send_message(prompt_finale)
-                        break
-                    except Exception as fb_err:
-                        err_msg = str(fb_err)
-                if tentat < 2:
-                    time.sleep(3 * (tentat + 1))
-                    continue
-            return {"reply": f"Errore del modello: {e}"}
-
-    testo_pulito = response.text or ""
-    # 1. Correzioni lessicali note
-    testo_pulito = re.sub(r'\b[Ss]ottofondo\b', 'sottovuoto', testo_pulito)
-    testo_pulito = re.sub(r'PRODOTTI\s+SOFOUND', 'PRODOTTI SOFOOD', testo_pulito, flags=re.IGNORECASE)
-    # 2. Pulizia grafica: trasforma eventuali cancelletti markdown (### Titolo -> **Titolo**)
-    testo_pulito = re.sub(r'^\s*#{1,6}\s*(.+)$', r'**\1**', testo_pulito, flags=re.MULTILINE)
-    # 3. Pulizia asterischi malformati (es. * *** o **** o asterischi spezzati)
-    testo_pulito = re.sub(r'(\s*[\*\-]\s*)\*{3,}', r'\1**', testo_pulito)
-    testo_pulito = re.sub(r'\*{4,}', '**', testo_pulito)
-    testo_pulito = re.sub(r'\*\*\s*\*\*', '', testo_pulito)
-    # 4. Pulizia prefissi fornitore e termini tecnici di imballo nei grassetti
-    testo_pulito = re.sub(r'\*\*([^\n*]{1,40}?)\s+-\s+([^\n*]+?)\*\*', r'**\2**', testo_pulito)
-    testo_pulito = re.sub(r'(\*\*[^*]*?)\s*\b(?:[Ss]ottovuoto|[Ss]/[Vv]|[Aa][Tt][Mm]|[Ss]/[Oo])\b\s*([^*]*?\*\*)', r'\1\2', testo_pulito)
-    testo_pulito = re.sub(r'\*\*([^*]+?)\*\*', lambda m: f'**{m.group(1).strip()}**', testo_pulito)
-
-    # 5. Pulizia leak tecnico interno (es. 'nel catalogo di questo turno', 'in questo turno')
-    testo_pulito = re.sub(r'\bnel\s+catalogo\s+di\s+questo\s+turno\b', 'a catalogo', testo_pulito, flags=re.IGNORECASE)
-    testo_pulito = re.sub(r'\bin\s+questo\s+turno\b', 'al momento', testo_pulito, flags=re.IGNORECASE)
-    testo_pulito = re.sub(r'\bnel\s+contesto\s+(?:fornito|a\s+disposizione)\b', 'a catalogo', testo_pulito, flags=re.IGNORECASE)
-    testo_pulito = re.sub(r'\bdi\s+questo\s+turno\b', 'del catalogo', testo_pulito, flags=re.IGNORECASE)
-
-    # 6. Garante Immagini: se un prodotto consigliato ha foto valida su disco ma l'LLM ha omesso il tag [IMG], iniettalo sotto la voce
-    tutti_record = list(record_prodotti) if 'record_prodotti' in locals() else []
-    for r in tutti_record:
-        meta_r = r.get("metadata", {})
-        p_img = str(meta_r.get("percorso_immagine", "")).strip()
-        ha_img = meta_r.get("ha_immagine_primaria") and p_img and p_img.lower() not in ("", "nan", "none", "false") and os.path.exists(p_img)
-        if ha_img and p_img not in testo_pulito:
-            prima_l = r.get("document", "").splitlines()[0] if r.get("document") else ""
-            nome_p = pulisci_nome_commerciale(prima_l, meta_r.get("nome_fornitore", "")).strip().lower()
-            forn_p = str(meta_r.get("nome_fornitore", "")).strip().lower()
-            righe = testo_pulito.splitlines()
-            nuove_righe = []
-            inserito = False
-            for riga in righe:
-                nuove_righe.append(riga)
-                if not inserito and riga.strip().startswith(("-", "*", "•")):
-                    riga_low = riga.lower()
-                    parole_chiave_nome = [w for w in re.findall(r'\w+', nome_p) if len(w) > 3]
-                    match_nome = any(w in riga_low for w in parole_chiave_nome) if parole_chiave_nome else False
-                    match_forn = forn_p in riga_low if len(forn_p) > 3 else False
-                    if match_nome and (match_forn or len(parole_chiave_nome) >= 2):
-                        nuove_righe.append(f"[IMG: {p_img}]")
-                        inserito = True
-            if inserito:
-                testo_pulito = "\n".join(nuove_righe)
+    # Generazione risposta con ciclo di Auto-Correzione (Reflection)
+    for tentativo_riflessione in range(2):
+        chat_session = client_genai.chats.create(
+            model=modello_da_usare,
+            config=types.GenerateContentConfig(system_instruction=prompt_di_sistema_completo, temperature=0.3),
+            history=stato["storico"]
+        )
+    
+        response = None
+        for tentat in range(3):
+            try:
+                response = chat_session.send_message(prompt_finale)
+                break
+            except Exception as e:
+                err_msg = str(e)
+                if any(k in err_msg for k in ["429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE"]):
+                    if modello_da_usare != MODELLO_FALLBACK:
+                        print(f"[ATTENZIONE] Fallback da {modello_da_usare} a {MODELLO_FALLBACK} per errore: {err_msg[:80]}")
+                        modello_da_usare = MODELLO_FALLBACK
+                        try:
+                            chat_session = client_genai.chats.create(
+                                model=MODELLO_FALLBACK,
+                                config=types.GenerateContentConfig(system_instruction=prompt_di_sistema_completo, temperature=0.3),
+                                history=stato["storico"]
+                            )
+                            response = chat_session.send_message(prompt_finale)
+                            break
+                        except Exception as fb_err:
+                            err_msg = str(fb_err)
+                    if tentat < 2:
+                        time.sleep(3 * (tentat + 1))
+                        continue
+                return {"reply": f"Errore del modello: {e}"}
+    
+        testo_pulito = response.text or ""
+        testo_pulito = re.sub(r'\b[Ss]ottofondo\b', 'sottovuoto', testo_pulito)
+        testo_pulito = re.sub(r'PRODOTTI\s+SOFOUND', 'PRODOTTI SOFOOD', testo_pulito, flags=re.IGNORECASE)
+        testo_pulito = re.sub(r'^\s*#{1,6}\s*(.+)$', r'**\1**', testo_pulito, flags=re.MULTILINE)
+        testo_pulito = re.sub(r'(\s*[\*\-]\s*)\*{3,}', r'\1**', testo_pulito)
+        testo_pulito = re.sub(r'\*{4,}', '**', testo_pulito)
+        testo_pulito = re.sub(r'\*\*\s*\*\*', '', testo_pulito)
+        testo_pulito = re.sub(r'\*\*([^\n*]{1,40}?)\s+-\s+([^\n*]+?)\*\*', r'**\2**', testo_pulito)
+        testo_pulito = re.sub(r'(\*\*[^*]*?)\s*\b(?:[Ss]ottovuoto|[Ss]/[Vv]|[Aa][Tt][Mm]|[Ss]/[Oo])\b\s*([^*]*?\*\*)', r'\1\2', testo_pulito)
+        testo_pulito = re.sub(r'\*\*([^*]+?)\*\*', lambda m: f'**{m.group(1).strip()}**', testo_pulito)
+        testo_pulito = re.sub(r'\bnel\s+catalogo\s+di\s+questo\s+turno\b', 'a catalogo', testo_pulito, flags=re.IGNORECASE)
+        testo_pulito = re.sub(r'\bin\s+questo\s+turno\b', 'al momento', testo_pulito, flags=re.IGNORECASE)
+        testo_pulito = re.sub(r'\bnel\s+contesto\s+(?:fornito|a\s+disposizione)\b', 'a catalogo', testo_pulito, flags=re.IGNORECASE)
+        testo_pulito = re.sub(r'\bdi\s+questo\s+turno\b', 'del catalogo', testo_pulito, flags=re.IGNORECASE)
+    
+        # 6. Garante Immagini (Ridotto per evitare spam)
+        # L'immagine viene iniettata SOLO SE:
+        # 1. L'utente ha chiesto esplicitamente una foto/immagine
+        # 2. Oppure se stiamo parlando di UN SINGOLO prodotto (es. ricerca molto specifica)
+        richiede_foto = any(w in user_query.lower() for w in ["foto", "immagine", "immagini", "vederlo", "fotografia", "fammelo vedere"])
+        tutti_record = list(record_prodotti) if 'record_prodotti' in locals() else []
+        mostra_immagini = richiede_foto or len(tutti_record) == 1
+        
+        if mostra_immagini:
+            for r in tutti_record:
+                meta_r = r.get("metadata", {})
+                p_img = str(meta_r.get("percorso_immagine", "")).strip()
+                ha_img = meta_r.get("ha_immagine_primaria") and p_img and p_img.lower() not in ("", "nan", "none", "false") and os.path.exists(p_img)
+                if ha_img and p_img not in testo_pulito:
+                    prima_l = r.get("document", "").splitlines()[0] if r.get("document") else ""
+                    nome_p = pulisci_nome_commerciale(prima_l, meta_r.get("nome_fornitore", "")).strip().lower()
+                    forn_p = str(meta_r.get("nome_fornitore", "")).strip().lower()
+                    righe = testo_pulito.splitlines()
+                    nuove_righe = []
+                    inserito = False
+                    for riga in righe:
+                        nuove_righe.append(riga)
+                        if not inserito and riga.strip().startswith(("-", "*", "•")):
+                            riga_low = riga.lower()
+                            parole_chiave_nome = [w for w in re.findall(r'\w+', nome_p) if len(w) > 3]
+                            
+                            match_count = sum(1 for w in parole_chiave_nome if w in riga_low)
+                            soglia = min(2, len(parole_chiave_nome)) if parole_chiave_nome else 0
+                            match_forn = forn_p in riga_low if len(forn_p) > 3 else False
+                            
+                            if match_count >= soglia or (match_count >= 1 and match_forn):
+                                nuove_righe.append(f"[IMG: {p_img}]")
+                                inserito = True
+                    if inserito:
+                        testo_pulito = "\n".join(nuove_righe)
+            testo_pulito = re.sub(r'(\[IMG:\s*[^\]]+\])(?:\s*\1)+', r'\1', testo_pulito)
+        else:
+            # Strip any [IMG] tags that the LLM might have generated on its own
+            testo_pulito = re.sub(r'\s*\[IMG:\s*[^\]]+\]\s*', ' ', testo_pulito)
+            
+        # Clean up any excessive newlines left behind by stripping
+        testo_pulito = re.sub(r'\n{3,}', '\n\n', testo_pulito)
+        testo_pulito = re.sub(r' \n', '\n', testo_pulito)
+        testo_pulito = re.sub(r'\n ,', ',', testo_pulito)
+        
+        # --- REFLECTION LOOP (Auto-Correzione) ---
+        esclusioni_richieste = []
+        if 'piano_ricerca' in locals() and piano_ricerca:
+            for c in piano_ricerca.get("componenti", []):
+                esclusioni_richieste.extend(c.get("esclusioni", []))
+                
+        if esclusioni_richieste and tentativo_riflessione == 0:
+            escl_str = ", ".join(esclusioni_richieste)
+            prompt_riflessione = f"L'utente NON vuole assolutamente questi ingredienti: {escl_str}.\nLa tua risposta li contiene per sbaglio? Rispondi solo 'ERRORE' se sì, altrimenti 'OK'.\n\nRISPOSTA:\n{testo_pulito}"
+            res_rif = client_genai.models.generate_content(model=MODELLO_FALLBACK, contents=prompt_riflessione)
+            if "ERRORE" in (res_rif.text or "").upper():
+                print(f"[REFLECTION] Errore rilevato: Ingredienti vietati ({escl_str}) inclusi per sbaglio. Rigenero la risposta.")
+                prompt_finale += f"\n\nATTENZIONE: Nella tua risposta precedente hai incluso un ingrediente espressamente vietato ({escl_str}). Questo è un errore grave. Riprova escludendolo totalmente."
+                continue
+                
+        break
 
     stato["storico"].append(types.Content(role="user", parts=[types.Part.from_text(text=user_query)]))
     stato["storico"].append(types.Content(role="model", parts=[types.Part.from_text(text=testo_pulito)]))

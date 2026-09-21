@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import time
 import datetime
@@ -6,15 +7,16 @@ from pathlib import Path
 import chromadb
 from google import genai
 from google.genai import types
-from system_prompt_v2 import SYSTEM_PROMPT_NINO
-from retrieval_utils import (
+from core.system_prompt_v2 import SYSTEM_PROMPT_NINO
+from core.query_decomposer import classify_intent, decompose_domain, verify_domain_rules
+from core.retrieval_utils import (
     costruisci_indice_codici,
     costruisci_indice_fornitori,
+    costruisci_indice_testuale,
     trova_match_esatti_per_codice,
     trova_match_per_fornitore,
     cerca_prodotti,
     costruisci_contesto_testuale,
-    rileva_intent_query,
 )
 from dotenv import load_dotenv
 
@@ -31,14 +33,15 @@ if not GEMINI_API_KEY:
 MODELLO_EMBEDDING = "models/gemini-embedding-2"
 PERCORSO_DATABASE_VETTORIALE = "./database_vettoriale"
 NOME_COLLEZIONE = "catalogo_sofood"
-MODELLO_GEMINI = "models/gemini-3.5-flash-lite"
+MODELLO_GEMINI = "models/gemini-3.6-flash" # Modello principale per rispondere
+MODELLO_BACKGROUND = "models/gemini-3.5-flash-lite" # Modello leggero per background
 
 PAUSA_TRA_CHIAMATE_SEC = 2.0
 TENTATIVI_MASSIMI_PER_CHIAMATA = 3
 
-N_RISULTATI_RAG = 25
+N_RISULTATI_RAG = 45
 MAX_SCAMBI_STORICO = 7
-MAX_PRODOTTI_MOSTRATI_TRACCIATI = 40
+MAX_PRODOTTI_MOSTRATI_TRACCIATI = 60
 
 # Logging delle conversazioni
 CARTELLA_LOG_CHAT = Path("./log/chat")
@@ -103,6 +106,7 @@ def avvia_chatbot():
 
     indice_codici_prodotto = costruisci_indice_codici(collezione)
     indice_fornitori = costruisci_indice_fornitori(collezione)
+    indice_testuale = costruisci_indice_testuale(collezione)
 
     config_generazione = types.GenerateContentConfig(
         system_instruction=SYSTEM_PROMPT_NINO,
@@ -149,7 +153,7 @@ def avvia_chatbot():
                         ultimo_bot = "".join(p.text for p in msg.parts if getattr(p, "text", None)).strip()
                         break
             if ultimo_bot == "KI?" or not ultimo_bot:
-                risposta = "GAS ei ou lo vuoi , ki Maicol, no volerlo, tu lo vuoi u u u , Nino essersi rotto u u u "
+                risposta = "GAS ei ou lo vuoi , ki Maicol, no volerlo, tu lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi lo vuoi, ei "
                 print(f"\nNino: {risposta}\n")
                 storico.append(types.Content(role="user", parts=[types.Part.from_text(text=user_query)]))
                 storico.append(types.Content(role="model", parts=[types.Part.from_text(text=risposta)]))
@@ -169,56 +173,32 @@ def avvia_chatbot():
 
         contesto_conversazione = "\n".join(scambi_recenti) if scambi_recenti else "(Inizio conversazione, nessun messaggio precedente)"
 
-        prompt_riscrittura = f"""Sei un estrattore di chiavi di ricerca per un database di prodotti alimentari.
-
-Ecco gli ultimi scambi della conversazione tra il cliente e l'assistente Nino:
-{contesto_conversazione}
-
-Il cliente ha appena scritto:
-"{user_query}"
-
-COMPITO:
-- Se il cliente usa pronomi o riferimenti (es. "questi", "quelli", "fammeli vedere", "mostrameli", "anche quelli di prima", "quello da 500g", "la prima opzione"):
-  * Estrai il NOME COMPLETO e SPECIFICO del prodotto a cui si riferisce nel messaggio precedente (es. se Nino ha citato "nocciole da 500g" e il cliente dice "mi fai vedere quello da 500g", devi estrarre "nocciole al tartufo 500g", NON solo "500g"!).
-  * Se nel messaggio precedente si parlava di un codice prodotto (es. LPSFIESP) o di un prodotto specifico, includi quel codice e nome esatto.
-- Se il cliente risponde semplicemente "sì", "si", "ok", "certo", "volentieri" a una proposta di Nino nel messaggio precedente (es. se Nino ha chiesto "ti va di abbinare delle birre?" e il cliente risponde "si"): estrai l'argomento o i prodotti appena proposti da Nino (es. se proponeva birre, estrai "Birrificio Messina birre").
-- Se il cliente menziona "inglesi", "pub inglese", "siamo inglesi": estrai "Nino Galli roast beef pastrami, Farino buns burger, Oberto burger fassona, Birrificio Messina birre".
-- Se il cliente chiede birre (es. "birre", "che birre", "dimmi tutte le birre", "tutte birre", "altre birre"): estrai "Birrificio Messina birre BM1503 BM1505 BM1553 BM1555 BM1560 BM1580".
-- Se il cliente chiede formati piccoli, assaggi o campionature (es. "formati piccoli", "per provarli tutti", "espositore"), estrai "espositore, degustazione, spicchi, skin, monodose".
-- Se il cliente chiede formati professionali o ristorazione (es. "formato horeca", "formato ristorante", "per la ristorazione", "secchiello"): estrai "De Filippis olive secchiello 5kg, Casa Marrazzo pelati latta, Il Convento baba 3kg".
-- Se il cliente menziona uno stile di cucina, locale o tipologia di menu:
-  * Cucina spagnola / tapas / paella: estrai "Solera Bellota iberico, Cecinas Nieto cecina, Medimer acciughe cantabrico, Capuano olive, Acquerello riso, Oberto fassona tagliata costata, Delfino pesce spada, Birrificio Messina, Il Convento baba"
-  * Hamburgeria / burger / street food / pub con cucina: estrai "Oberto fassona macinato burger, Patrone hamburger maiale nero porchetta, Nino Galli pastrami roast beef, Farino buns padellino puccia, Ado pancetta, Agricola Buongiorno ketchup crusco, Biobonta salse, Valle di Gresta patatine, Birrificio Messina, Il Convento baba"
-  * Cucina pugliese: estrai "Gentile orecchiette, Di Tria cime di rapa sponsali assassina bite, Agricola Buongiorno peperone crusco, Pessolani podolico, Martina Franca capocollo, Farino taralli, Birrificio Messina, Il Convento baba"
-  * Cucina napoletana: estrai "Casa Marrazzo San Marzano friarielli, Gentile pasta gragnano, Cosi Com'e datterini, Delfino colatura alici, Latte Nobile, Il Convento baba limoncello, Birrificio Messina"
-  * Cucina italiana classica / trattoria / primi e secondi: estrai "Gentile pasta gragnano, Scudellaro pollo eviscerato uova, Oberto fassona cube roll costata, Di Tria cardoncelli carciofi, Casa Marrazzo san marzano, Guglielmi olio, Boschi soffritto spezie, Il Convento baba, Birrificio Messina"
-  * Cucina romana / carbonara / amatriciana / cacio e pepe: estrai "Gentile pasta gragnano, Ado pancetta, Scudellaro uova, Abbondanza pecorino, Casa Marrazzo pelati, Il Convento baba, Birrificio Messina"
-  * Polpettificio / polpette: estrai "Oberto fassona macinato trita, Scudellaro pollo uova, Casa Marrazzo pelati, Di Tria assassina bite cardoncelli, Boschi soffritto, Guglielmi olio, Il Convento baba, Birrificio Messina"
-  * Cucina paninoteca / kebab gourmet / street food: estrai "Farino puccia padellino buns, Fresco Piada, Oberto fassona sfilaccio, Patrone porchetta, Nino Galli pastrami roast beef, Agricola Buongiorno ketchup crusco, Valle di Gresta patatine, Birrificio Messina, Il Convento baba"
-  * Cucina di mare / pesce / primi di mare: estrai "Gentile pasta fusilli spaghettoni, Delfino colatura alici tonno filetti, Medimer alici cantabrico, Smeralda bottarga granchio, Cosi Com'e datterini, Guglielmi olio limone"
-  * Cucina messicana / tex-mex: estrai "Oberto fassona macinato, Fresco Piada, Casa Marrazzo san marzano, Boschi peperoncino cipolla, Birrificio Messina birre, Il Convento baba"
-  * Cucina greca: estrai "Capuano olive cerignola, De Filippis olive secchiello, Medimer alici cantabrico, Farino puccia, Oberto fassona tagliata, La Nicchia origano, Birrificio Messina birre, Il Convento baba"
-  * Cucina cinese / giapponese / asiatica: estrai "Medimer alici cantabrico, Smeralda salmone selvaggio, Colimena tonno, Guglielmi olio limone, Birrificio Messina birre, Il Convento baba"
-  * Dolci / dessert / fine pasto: estrai "Il Convento baba limoncello rum, Fratelli Lunardi cantucci cookies crema gianduia, Latte Nobile yogurt limoni albicocche, Scudellaro uova biologiche, Evergreen crema pistacchio"
-  * Tiramisù / cheesecake / dolci al cucchiaio: estrai "Fratelli Lunardi cantucci cookies cioccolato mandorle, Scudellaro uova biologiche, Latte Nobile yogurt fresco, Evergreen crema pistacchio, Il Convento limoncello"
-  * Menu completo: se il cliente chiede un menu completo, estrai sempre "Birrificio Messina birre, Il Convento baba rum limoncello, Fratelli Lunardi cantucci cookies, Latte Nobile yogurt, Capuano olive cerignola, Farino taralli, Di Tria assassina bite" unito ai prodotti della cucina menzionata.
-  * Soffritto / spezie / aromi: estrai "Boschi preparato aromatico soffritto marinara spezie"
-  * Tapas per aperitivo: estrai "Di Tria assassina bite parmigianine frittelline, Medimer acciughe cantabrico, Colimena tonno, De Giorgi carciofini"
-- Se il cliente menziona un codice articolo (es. LPSFIESP, CAP00001, ecc.), mantieni sempre il codice esatto nella chiave.
-- Se il cliente cambia argomento o fa una nuova richiesta, restituisci la sua richiesta riformulata in modo chiaro per una ricerca nel catalogo.
-- Se ci sono più prodotti, separali con virgola.
-
-REGOLA ASSOLUTA: Niente convenevoli, nessuna spiegazione, solo le chiavi di ricerca."""
-
+                # 5-NODE ARCHITECTURE: NODO 1 e NODO 2 (Intent & Decomposer)
         for tentat in range(3):
             try:
-                risposta_riscrittura = client_genai.models.generate_content(
-                    model=MODELLO_GEMINI,
-                    contents=prompt_riscrittura,
-                    config=types.GenerateContentConfig(temperature=0.0)
-                )
-                testo_per_ricerca = risposta_riscrittura.text.strip()
-                print(f"\n[DEBUG RAG] Query Originale: '{user_query}' -> Query Riscritta: '{testo_per_ricerca}'\n")
+                intent_res = classify_intent(user_query, contesto_conversazione)
+                tree = decompose_domain(user_query, contesto_conversazione)
+                
+                piano_ricerca = {
+                    "intento": "tagliere_o_ricetta" if intent_res.intent == "TAGLIERE_O_RICETTA" else "ricerca_catalogo",
+                    "componenti": []
+                }
+                for slot in tree.slots:
+                    piano_ricerca["componenti"].append({
+                        "ruolo": slot.macro_family.lower(),
+                        "quantita_target": slot.quantity,
+                        "sottocategoria_forzata": slot.forced_subcategory,
+                        "query_pulita": " ".join(slot.constraints.must_have),
+                        "esclusioni": slot.constraints.must_not_have
+                    })
+                    
+                queries = []
+                for comp in piano_ricerca.get("componenti", []):
+                    q = comp.get("query_pulita")
+                    if q:
+                        queries.append(q)
+                testo_per_ricerca = ", ".join(queries) if queries else user_query
+                print(f"\\n[DEBUG RAG] Decomposer JSON generato: {piano_ricerca}\\n")
                 break
             except Exception as e:
                 if ("429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)) and tentat < 2:
@@ -226,13 +206,12 @@ REGOLA ASSOLUTA: Niente convenevoli, nessuna spiegazione, solo le chiavi di rice
                     time.sleep(4 * (tentat + 1))
                     continue
                 print(f"[ATTENZIONE] Riscrittura query fallita, uso l'originale. Errore: {e}")
+                testo_per_ricerca = user_query
+                piano_ricerca = None
                 break
 
         # RICERCA IBRIDA CON SPLIT MULTI-QUERY
         try:
-            # Rileva se l'utente ha un intent specifico (es. tagliere, aperitivo)
-            intent_rilevato = rileva_intent_query(user_query) or rileva_intent_query(testo_per_ricerca)
-
             record_prodotti = []
             id_visti = set()
 
@@ -251,9 +230,6 @@ REGOLA ASSOLUTA: Niente convenevoli, nessuna spiegazione, solo le chiavi di rice
                 if r["id"] not in id_visti:
                     id_visti.add(r["id"])
                     record_prodotti.append(r)
-                if r["id"] not in id_visti:
-                    id_visti.add(r["id"])
-                    record_prodotti.append(r)
 
             # 3. SPLIT DELLA QUERY PER RICERCHE MULTIPLE MIRATE
             testi_da_cercare = [t.strip() for t in testo_per_ricerca.split(",") if t.strip()]
@@ -262,8 +238,9 @@ REGOLA ASSOLUTA: Niente convenevoli, nessuna spiegazione, solo le chiavi di rice
             for singolo_testo in testi_da_cercare:
                 risultati_parziali = cerca_prodotti(
                     collezione, indice_codici_prodotto, embedder, singolo_testo,
-                    risultati_per_query, config_intent=intent_rilevato,
-                    indice_fornitori=indice_fornitori
+                    n_risultati=risultati_per_query,
+                    indice_fornitori=indice_fornitori,
+                    indice_testuale=indice_testuale
                 )
                 for r in risultati_parziali:
                     if r["id"] not in id_visti:
@@ -294,38 +271,58 @@ REGOLA ASSOLUTA: Niente convenevoli, nessuna spiegazione, solo le chiavi di rice
         if len(storico) > max_messaggi:
             storico[:] = storico[-max_messaggi:]
 
-        chat_session = client_genai.chats.create(
-            model=MODELLO_GEMINI,
-            config=config_generazione,
-            history=storico
-        )
+        # Generazione risposta con ciclo di Auto-Correzione (Reflection)
+        for tentativo_riflessione in range(2):
+            chat_session = client_genai.chats.create(
+                model=MODELLO_GEMINI,
+                config=config_generazione,
+                history=storico
+            )
+            
+            try:
+                response = chat_session.send_message(prompt_finale)
+                testo_pulito = response.text or ""
+                # 1. Protezione anti-allucinazione fonetica (es. Sottofondo -> Sottovuoto)
+                testo_pulito = re.sub(r'\b[Ss]ottofondo\b', 'sottovuoto', testo_pulito)
+                # 2. Pulizia nomi in grassetto: rimozione Brand -, rimozione packaging, trim spazi interni
+                testo_pulito = re.sub(r'\*\*([^\n*]{1,40}?)\s+-\s+([^\n*]+?)\*\*', r'**\2**', testo_pulito)
+                testo_pulito = re.sub(r'(\*\*[^*]*?)\s*\b(?:[Ss]ottovuoto|[Ss]/[Vv]|[Aa][Tt][Mm]|[Ss]/[Oo])\b\s*([^*]*?\*\*)', r'\1\2', testo_pulito)
+                testo_pulito = re.sub(r'\*\*([^*]+?)\*\*', lambda m: f'**{m.group(1).strip()}**', testo_pulito)
+                
+                # --- REFLECTION LOOP ---
+                esclusioni_richieste = []
+                if 'piano_ricerca' in locals() and piano_ricerca:
+                    for c in piano_ricerca.get("componenti", []):
+                        esclusioni_richieste.extend(c.get("esclusioni", []))
+                
+                if esclusioni_richieste and tentativo_riflessione == 0:
+                    escl_str = ", ".join(esclusioni_richieste)
+                    prompt_riflessione = f"L'utente NON vuole assolutamente questi ingredienti: {escl_str}.\nLa tua risposta li contiene per sbaglio? Rispondi solo 'ERRORE' se sì, altrimenti 'OK'.\n\nRISPOSTA:\n{testo_pulito}"
+                    res_rif = client_genai.models.generate_content(model=MODELLO_BACKGROUND, contents=prompt_riflessione)
+                    if "ERRORE" in (res_rif.text or "").upper():
+                        print(f"[REFLECTION] Errore rilevato: Ingredienti vietati ({escl_str}) inclusi per sbaglio. Rigenero.")
+                        prompt_finale += f"\n\nATTENZIONE: Nella tua risposta precedente hai incluso un ingrediente vietato ({escl_str}). Riprova escludendolo totalmente."
+                        continue
+                
+                print(f"\nNino: {testo_pulito}")
 
-        try:
-            response = chat_session.send_message(prompt_finale)
-            testo_pulito = response.text or ""
-            # 1. Protezione anti-allucinazione fonetica (es. Sottofondo -> Sottovuoto)
-            testo_pulito = re.sub(r'\b[Ss]ottofondo\b', 'sottovuoto', testo_pulito)
-            # 2. Pulizia nomi in grassetto: rimozione Brand -, rimozione packaging, trim spazi interni
-            testo_pulito = re.sub(r'\*\*([^\n*]{1,40}?)\s+-\s+([^\n*]+?)\*\*', r'**\2**', testo_pulito)
-            testo_pulito = re.sub(r'(\*\*[^*]*?)\s*\b(?:[Ss]ottovuoto|[Ss]/[Vv]|[Aa][Tt][Mm]|[Ss]/[Oo])\b\s*([^*]*?\*\*)', r'\1\2', testo_pulito)
-            testo_pulito = re.sub(r'\*\*([^*]+?)\*\*', lambda m: f'**{m.group(1).strip()}**', testo_pulito)
-            print(f"\nNino: {testo_pulito}")
+                storico.append(types.Content(role="user", parts=[types.Part.from_text(text=user_query)]))
+                storico.append(types.Content(role="model", parts=[types.Part.from_text(text=testo_pulito)]))
 
-            storico.append(types.Content(role="user", parts=[types.Part.from_text(text=user_query)]))
-            storico.append(types.Content(role="model", parts=[types.Part.from_text(text=testo_pulito)]))
+                # LOGGING
+                timestamp_ora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                log_chat.append({"ruolo": "utente", "testo": user_query, "timestamp": timestamp_ora})
+                log_chat.append({"ruolo": "nino", "testo": testo_pulito, "timestamp": timestamp_ora})
+                contatore_messaggi += 1
 
-            # LOGGING
-            timestamp_ora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            log_chat.append({"ruolo": "utente", "testo": user_query, "timestamp": timestamp_ora})
-            log_chat.append({"ruolo": "nino", "testo": testo_pulito, "timestamp": timestamp_ora})
-            contatore_messaggi += 1
+                if contatore_messaggi % FREQUENZA_SALVATAGGIO_LOG == 0:
+                    salva_log_chat(log_chat, session_id)
+                    print("[INFO] Log conversazione aggiornato.")
 
-            if contatore_messaggi % FREQUENZA_SALVATAGGIO_LOG == 0:
-                salva_log_chat(log_chat, session_id)
-                print("[INFO] Log conversazione aggiornato.")
-
-        except Exception as e:
-            print(f"\n[ERRORE]: {e}")
+                break
+            except Exception as e:
+                print(f"\n[ERRORE]: {e}")
+                break
 
 
 if __name__ == "__main__":
