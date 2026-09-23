@@ -74,7 +74,7 @@ if not GEMINI_API_KEY:
     raise ValueError("ATTENZIONE: GEMINI_API_KEY non trovata nel file .env")
 
 MODELLO_EMBEDDING = "models/gemini-embedding-2"
-MODELLO_PRINCIPALE = "models/gemini-3.6-flash"
+MODELLO_PRINCIPALE = os.getenv("MODELLO_RISPOSTA", "models/gemini-1.5-flash")
 MODELLO_GEMINI = "models/gemini-3.5-flash-lite"
 MODELLO_FALLBACK = "models/gemini-3.5-flash-lite"
 MODELLO_AUDIO = "models/gemini-2.5-flash"
@@ -287,9 +287,11 @@ Rispondi rigorosamente con il JSON dello schema AnalisiUnificata.
         elementi_fb = []
         q_lower = user_query.lower()
         if any(w in q_lower for w in ["salum", "prosciutt", "affettat", "coppa", "pancetta", "bresaola", "salam", "mortadella"]):
-            elementi_fb.append(ElementoRichiesto(dominio="salumi", tipo_prodotto="salumi", query_ricerca="salumi affettati prosciutti", quantita=2))
+            q_salumi = "prosciutto crudo " if "prosciutt" in q_lower else ""
+            q_salumi += "salumi affettati prosciutti"
+            elementi_fb.append(ElementoRichiesto(dominio="salumi", tipo_prodotto="salumi", query_ricerca=q_salumi, quantita=2))
         if any(w in q_lower for w in ["formagg", "pecorino", "caciocavallo", "parmigiano", "mozzarella", "burrata"]):
-            elementi_fb.append(ElementoRichiesto(dominio="formaggi", tipo_prodotto="formaggi", query_ricerca="formaggi", quantita=2))
+            elementi_fb.append(ElementoRichiesto(dominio="formaggi", tipo_prodotto="formaggi", query_ricerca="formaggi stagionati", quantita=2))
         if any(w in q_lower for w in ["mare", "pesce", "ittico", "salmone", "tonno", "gamber", "polpo"]):
             elementi_fb.append(ElementoRichiesto(dominio="mare", tipo_prodotto="prodotti di mare", query_ricerca="mare pesce ittico", quantita=2))
         if any(w in q_lower for w in ["marmellat", "confettur", "miele", "crem", "sottoli", "pasta", "riso"]):
