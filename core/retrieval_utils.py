@@ -706,6 +706,16 @@ def cerca_prodotti(collezione, indice_codici, embedder, user_query: str, n_risul
                     for t in ("carne", "pesce", "strutto", "tonno", "acciug")
                 ):
                     continue
+            elif fd_lower == "senza_glutine":
+                is_sg = str(r["metadata"].get("senza_glutine", "")).upper()
+                if is_sg.startswith("NO"):
+                    # Filtro molto stringente sui reparti a rischio (pasta, pane, dolci, panati)
+                    # a meno che non ci sia scritto esplicitamente "senza glutine" nel testo
+                    if rep in ["PANIFICATI E SOSTITUTIVI", "PASTA", "PASTA FRESCA", "DOLCI E DESSERT"] and not any(w in doc_basso for w in ["senza glutine", "gluten free"]):
+                        continue
+                    # E una blacklist di parole nel documento
+                    if any(_termine_presente_non_negato(doc_basso, t) for t in ("glutine", "frumento", "farina di grano", "orzo", "farro", "kamut", "seitan", "pangrattato", "panat", "infarinat")):
+                        continue
             filtrati_dieta.append(r)
         combinati = filtrati_dieta
 

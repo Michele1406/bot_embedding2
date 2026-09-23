@@ -2143,4 +2143,4 @@ if __name__ == "__main__":
     print("[OK] SERVER FLASK AVVIATO CON SUCCESSO!")
     print(">>> Apri il tuo browser e vai all'indirizzo: http://127.0.0.1:5000")
     print("="*70)
-    app.run(debug=True, use_reloader=False)
+    app.run(debug=False, use_reloader=False)

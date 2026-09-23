@@ -27,8 +27,8 @@ I problemi affrontati durante lo sviluppo si concentrano su come far ragionare i
 
 - **Constraint Solving (Incompatibilità):** Evitare che il bot proponga due prodotti della stessa famiglia (es. Salame e Finocchiona) in un singolo tagliere, ignorando la varietà necessaria per un piatto professionale. Questo ha richiesto l'introduzione di una *matrice di incompatibilità* (`domain_rules.py`).
 - **Deviazioni Fuori Contesto:** Insegnare al bot che un ristorante di pesce non dovrebbe ricevere proposte di salumi di carne a meno di una richiesta specifica ("ospiti alternativi").
-- **Bilanciamento del Menu:** Assicurare che in un piatto composto ci sia eterogeneità cromatica e di consistenze (es. non due elementi croccanti o due elementi morbidi dello stesso sapore predominante).
-- **Interpretazione del Formato:** Far comprendere al bot che un prodotto in secchio da 3Kg non va proposto a una piccola salumeria di quartiere, e viceversa un formato da 100g non va proposto alla cucina di un grande hotel.
+- **Bilanciamento del Menu:** Assicurare eterogeneità nei piatti composti. *(Stato attuale: implementato parzialmente tramite le matrici di famiglia merceologica; i controlli di texture puri come croccante/morbido non sono ancora strutturati a livello di metadati).*
+- **Interpretazione del Formato:** Far comprendere al bot la differenza tra formati HORECA e RETAIL. *(Stato attuale: funzionante nella ricerca diretta tramite la profilazione del canale, ma in attesa di essere propagato alla pipeline di generazione automatica dei taglieri).*
 
 ---
 
