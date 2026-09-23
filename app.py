@@ -815,6 +815,28 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
                     filtro_dieta=stato.get("filtro_dieta"),
                     canale_locale=stato.get("canale_locale"),
                 )
+
+                # --- ACTIVE RAG FALLBACK ---
+                q_richiesta = getattr(elem, "quantita", None) or 3
+                if len(risultati_parziali) < max(3, q_richiesta) and elem.dominio.lower() != "generale":
+                    print(f"[ACTIVE RAG] Trovati solo {len(risultati_parziali)} risultati per '{elem.query_ricerca}'. Avvio contro-query sul dominio '{elem.dominio}'...")
+                    risultati_fallback = cerca_prodotti(
+                        collezione, indice_codici_prodotto, embedder, elem.dominio,
+                        n_risultati, indice_fornitori=indice_fornitori,
+                        indice_testuale=indice_testuale,
+                        filtro_categoria=None,
+                        filtro_reparto=filtro_rep,
+                        filtro_sottocategoria=filtro_sotto,
+                        tipo_locale=stato.get("tipo_locale"),
+                        filtro_dieta=stato.get("filtro_dieta"),
+                        canale_locale=stato.get("canale_locale"),
+                    )
+                    
+                    # Evita duplicati tra parziali e fallback
+                    id_gia_presi = {r['id'] for r in risultati_parziali}
+                    for r_fb in risultati_fallback:
+                        if r_fb['id'] not in id_gia_presi:
+                            risultati_parziali.append(r_fb)
                 if any(w in query_bassa_combinata for w in ["finger food", "frittellin", "pastellat", "aperitiv", "snack", "caldo", "caldi", "fritti", "fritto"]) and not any(w in query_bassa_combinata for w in ["gelato", "sorbetto", "dolce", "dessert"]):
                     # Un finger food "caldo" non può essere un gelato
                     risultati_parziali = [
@@ -937,11 +959,11 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
     if getattr(analisi, "elementi_richiesti", None):
         for elem in analisi.elementi_richiesti:
             if getattr(elem, "quantita", None) is not None:
-                istruzioni_conteggio.append(f"- Categoria '{elem.dominio}': devi presentare ESATTAMENTE {elem.quantita} prodotti. Nè uno di più, nè uno di meno.")
+                istruzioni_conteggio.append(f"- Categoria '{elem.dominio}': devi presentare ESATTAMENTE {elem.quantita} prodotti. Nè uno di più, nè uno di meno.\n  (Eccezione: se non ci sono abbastanza risultati perfetti, per raggiungere la quota {elem.quantita} proponi i prodotti più simili o affini presenti nei DATI RAG piuttosto che dire che non ne abbiamo).")
     
     blocco_conteggi = ""
     if istruzioni_conteggio:
-        blocco_conteggi = "\n[VINCOLI DI QUANTITA' OBBLIGATORI (Da rispettare rigorosamente)]\n" + "\n".join(istruzioni_conteggio) + "\n"
+        blocco_conteggi = "\n[VINCOLI DI QUANTITA' OBBLIGATORI (Da rispettare rigorosamente, salvo eccezioni indicate)]\n" + "\n".join(istruzioni_conteggio) + "\n"
 
     prompt_finale = f"""{blocco_profilo}{blocco_conteggi}
     [DATI RAG ESTRATTI DAL CATALOGO - USA QUESTE INFO PER RISPONDERE]
