@@ -587,7 +587,7 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
     stato["canale_locale"] = rileva_canale_locale(stato.get("tipo_locale"))
 
     print(f"[DEBUG PROFILO] Tipo Locale: {stato.get('tipo_locale')} | Canale: {stato.get('canale_locale')} | Stile: {stato.get('stile_cucina')} | Dieta: {stato.get('filtro_dieta')} | No Affettatrice: {stato.get('senza_affettatrice')} | Città: {stato.get('citta')}")
-    print(f"[DEBUG INTENT] Richiede Composizione: {analisi.richiede_composizione} ({analisi.tipo_composizione})")
+    print(f"[DEBUG INTENT] Richiede Composizione: {analisi.richiede_composizione} ({analisi.tipo_richiesta})")
 
     stato.setdefault("ultimo_piatto_proposto", None)
     stato.setdefault("ricette_mostrate", set())
