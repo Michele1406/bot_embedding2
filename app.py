@@ -865,13 +865,15 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
             is_jam_query = bool(re.search(r"\b(marmellat[ae]|confettur[ae]|mostard[ae]|compost[ae])\b", user_query.lower()))
             is_warm_request = bool(re.search(r"\b(cald[oi]|fritt[oi]|friggere|cuocere|surgelat[oi]|gelo)\b", user_query.lower()))
 
+            max_req_q = max((getattr(e, "quantita", 3) or 3) for e in elementi_da_cercare) if elementi_da_cercare else 3
+            
             conteggio_globale = {}
             record_diversificati = []
             for r in record_prodotti:
                 forn = r["metadata"].get("nome_fornitore", "")
                 conteggio_globale[forn] = conteggio_globale.get(forn, 0) + 1
                 is_regional_brand = bool(cluster_attivo_fornitori and any(cf.lower() in forn.lower() for cf in cluster_attivo_fornitori))
-                max_brand = 8 if (
+                max_brand = max(10, max_req_q + 2) if (
                     r.get("match_esatto")
                     or r.get("match_fornitore")
                     or r.get("match_regionale")
@@ -879,7 +881,7 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
                     or (is_beer_query and "messina" in forn.lower())
                     or (is_jam_query and "mongetto" in forn.lower())
                     or (is_warm_request and "di tria" in forn.lower())
-                ) else 2
+                ) else max(4, max_req_q)
                 if r.get("match_esatto") or r.get("match_regionale") or conteggio_globale[forn] <= max_brand:
                     record_diversificati.append(r)
             record_prodotti = record_diversificati
