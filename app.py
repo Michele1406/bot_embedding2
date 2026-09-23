@@ -284,18 +284,25 @@ Rispondi rigorosamente con il JSON dello schema AnalisiUnificata.
         print(f"[ATTENZIONE] Analisi unificata fallita ({e}), fallback euristico.")
         richiede_comp = any(p in user_query.lower() for p in ["tagliere", "tris", "aperitivo", "ciotoline", "menu", "menù", "burger", "hamburger"])
         
-        # Fallback basico
-        fallback_element = ElementoRichiesto(
-            dominio="generale",
-            quantita=None,
-            query_ricerca=user_query
-        )
+        elementi_fb = []
+        q_lower = user_query.lower()
+        if any(w in q_lower for w in ["salum", "prosciutt", "affettat", "coppa", "pancetta", "bresaola", "salam", "mortadella"]):
+            elementi_fb.append(ElementoRichiesto(dominio="salumi", tipo_prodotto="salumi", query_ricerca="salumi affettati prosciutti", quantita=2))
+        if any(w in q_lower for w in ["formagg", "pecorino", "caciocavallo", "parmigiano", "mozzarella", "burrata"]):
+            elementi_fb.append(ElementoRichiesto(dominio="formaggi", tipo_prodotto="formaggi", query_ricerca="formaggi", quantita=2))
+        if any(w in q_lower for w in ["mare", "pesce", "ittico", "salmone", "tonno", "gamber", "polpo"]):
+            elementi_fb.append(ElementoRichiesto(dominio="mare", tipo_prodotto="prodotti di mare", query_ricerca="mare pesce ittico", quantita=2))
+        if any(w in q_lower for w in ["marmellat", "confettur", "miele", "crem", "sottoli", "pasta", "riso"]):
+            elementi_fb.append(ElementoRichiesto(dominio="dispensa", tipo_prodotto="dispensa", query_ricerca="marmellata conserve", quantita=1))
+        
+        if not elementi_fb:
+            elementi_fb = [ElementoRichiesto(dominio="generale", quantita=None, query_ricerca=user_query)]
         return AnalisiUnificata(
             tipo_richiesta="conversazione_generica" if not richiede_comp else "composizione_piatto",
             richiede_composizione=richiede_comp,
             riferimento_precedente=False,
             argomento_riferito=None,
-            elementi_richiesti=[fallback_element],
+            elementi_richiesti=elementi_fb,
             profilo=ProfiloClienteAggiornato()
         )
 
