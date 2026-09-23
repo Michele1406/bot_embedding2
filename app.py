@@ -28,29 +28,35 @@ from core.retrieval_utils import (
 from core.fornitori_config import FORNITORI, elenco_fornitori_per_ruolo_regione
 from core.profilazione_locale import rileva_canale_locale
 from core.tassonomia_sofood import classifica_terra_mare
-from core.query_decomposer import classify_intent, decompose_domain, verify_domain_rules
 from core.domain_rules import check_board_violations
 from dotenv import load_dotenv
 
-# Modelli Pydantic per Profilazione e Decomposizione Intelligente
-class SottoRicerca(BaseModel):
-    query: str
-    reparto: str | None = None  # CARNE, DISPENSA, FORMAGGI, GELO, MARE, SALUMI
-    sottocategoria: str | None = None  # valore ESATTO (incluse MAIUSCOLE) da tassonomia_sofood.SOTTOCATEGORIE_NOMI, es. "PROSC CRUDO", "OLIVE", "GRISSINI", "PECORINO"
-    categoria: str | None = None
+from pydantic import BaseModel, Field
+from google import genai
+from google.genai import types
+from core.system_prompt_v2 import SYSTEM_PROMPT_NINO
 
+class ElementoRichiesto(BaseModel):
+    dominio: str = Field(description="Es. 'salumi', 'formaggi', 'sottoli', 'mare', 'vino', 'dispensa'")
+    quantita: int | None = Field(None, description="Se l'utente chiede un numero esatto, es. 3. Altrimenti None.")
+    reparto: str | None = Field(None, description="Es. CARNE, DISPENSA, FORMAGGI, GELO, MARE, SALUMI")
+    sottocategoria: str | None = Field(None, description="Sottocategoria esatta se deducibile")
+    query_ricerca: str = Field(description="Query semantica per recuperare i prodotti")
+    
 class ProfiloClienteAggiornato(BaseModel):
-    tipo_locale: str | None = None  # bar, pub, bistrot, ristorante, trattoria, pizzeria, bottega, enoteca
-    stile_cucina: str | None = None  # tradizionale, mare, pugliese, spagnolo, gourmet
-    dieta_filtro: str | None = None  # vegano, vegetariano, senza_glutine
+    tipo_locale: str | None = None
+    stile_cucina: str | None = None
+    dieta_filtro: str | None = None
     senza_affettatrice: bool = False
     citta: str | None = None
 
-class AnalisiRichiesta(BaseModel):
-    richiede_composizione: bool  # True per taglieri, tris, aperitivi, menu, piatti composti, degustazioni, abbinamenti
-    tipo_composizione: str  # "tagliere", "tris_bar", "primo", "secondo", "aperitivo", "pinsa", "nessuna"
+class AnalisiUnificata(BaseModel):
+    tipo_richiesta: str = Field(description="'panoramica_catalogo', 'ricerca_specifica', 'composizione_piatto', 'conversazione_generica'")
+    richiede_composizione: bool = Field(description="True se chiede taglieri, menu, abbinamenti, tris")
+    riferimento_precedente: bool = Field(description="True se dice 'dimmene altri', 'ancora', 'altri' riferiti a qualcosa di prima")
+    argomento_riferito: str | None = Field(None, description="Es. 'salumi' se il riferimento precedente era ai salumi")
+    elementi_richiesti: list[ElementoRichiesto] = Field(description="Lista dei domini/prodotti richiesti")
     profilo: ProfiloClienteAggiornato
-    sotto_ricerche: list[SottoRicerca]
 
 # Carica le variabili d'ambiente dal file .env
 load_dotenv()
@@ -228,107 +234,69 @@ def home():
     return render_template_string(HTML_TEMPLATE)
 
 
-def analizza_richiesta_e_profila(client_genai, user_query: str, testo_per_ricerca: str, stato_attuale: dict) -> AnalisiRichiesta:
-    """Analizza la richiesta, estrae/aggiorna il profilo del cliente ed espande concettualmente le sotto-ricerche."""
+def analizza_richiesta_unificata(client_genai, user_query: str, storico_testuale: str, stato_attuale: dict) -> AnalisiUnificata:
+    """Analizza la richiesta, estrae il profilo, gestisce la continuità conversazionale ed estrae gli elementi per il RAG."""
     locale_noto = stato_attuale.get("tipo_locale") or "non ancora specificato"
     dieta_nota = stato_attuale.get("filtro_dieta") or "nessuna"
     affettatrice_nota = "senza affettatrice" if stato_attuale.get("senza_affettatrice") else "non specificato"
     
-    prompt = f"""Sei l'analizzatore semantico B2B di So Food. Analizza la richiesta del cliente ristoratore.
+    prompt = f"""Sei l'analizzatore semantico unificato B2B di So Food.
+Devi estrarre l'intento dell'utente, eventuali regole di profilo, ed elencare TUTTI i domini merceologici (ElementiRichiesti) di cui ha bisogno.
 
-CONTESTO ATTUALE CLIENTE:
-- Tipo locale noto: {locale_noto}
-- Dieta/Vincolo noto: {dieta_nota}
+CONTESTO CLIENTE ATTUALE:
+- Tipo locale: {locale_noto}
+- Dieta: {dieta_nota}
 - Attrezzatura: {affettatrice_nota}
 
-MESSAGGIO CLIENTE:
-"{user_query}" (Chiavi estratte: "{testo_per_ricerca}")
+STORICO CONVERSAZIONE (per capire i riferimenti):
+{storico_testuale}
 
-COMPITI:
-1. PROFILO CLIENTE:
-   - Se il cliente nomina o aggiorna il tipo di locale (bar, pub, bistrot, ristorante, trattoria, pizzeria, bottega, enoteca), impostalo in tipo_locale.
-   - Se menziona cucina o dieta vegana, vegetariana o celiaca/senza glutine, impostalo in dieta_filtro ('vegano', 'vegetariano', 'senza_glutine').
-   - Se dice che non ha l'affettatrice (o vuole solo preaffettati/taglio al coltello), imposta senza_affettatrice = true.
-   - Se menziona la città o provincia (es. Bari, Roma, Lecce), impostala in citta.
+MESSAGGIO ATTUALE DEL CLIENTE:
+"{user_query}"
 
-2. CLASSIFICAZIONE INTENT (richiede_composizione):
-   - Imposta richiede_composizione = true se il cliente chiede un assemblaggio di più prodotti, una selezione, un piatto composto o una proposta gastronomica (es. tagliere, tris, ciotoline aperitivo, antipasti misti, primo piatto, secondo, degustazione, abbinamento, menu, pinsa farcita).
-   - Imposta richiede_composizione = false se chiede un singolo prodotto, una lista o verifica di una categoria (es. 'avete mortadella?', 'che birre avete?', 'mostrami il catalogo').
+REGOLE PER L'ESTRAZIONE DEGLI ELEMENTI (ElementoRichiesto):
+1. Se il cliente chiede più domini (es. "3 salumi e 2 formaggi"), DEVI creare 2 elementi distinti.
+2. `quantita`: se l'utente chiede "3 salumi", imposta quantita=3. Se chiede genericamente "dei salumi" o "che salumi hai", imposta quantita=None.
+3. `dominio`: usa termini semplici e chiari ("salumi", "formaggi", "sottoli", "mare", "pane", "dispensa", "carne").
+4. `reparto`: opzionale, usa valori come CARNE, DISPENSA, FORMAGGI, GELO, MARE, SALUMI.
+5. `sottocategoria`: opzionale, se l'utente è specifico (es. "erborinato", "olive", "taralli").
+6. `query_ricerca`: formula una query semantica utile a trovare i prodotti di quel dominio. Usa parole chiave espansive.
+   - Esempio pub: "buns panini burger Farino maionese"
+   - Esempio mare: "bresaola tonno salmone affumicato Italfish"
 
-3. SOTTO-RICERCHE CON ESPANSIONE CONCETTUALE:
-   - REGOLA FONDAMENTALE: NON cercare parole generiche o astratte come 'tris', 'ciotoline', 'aperitivo', 'stuzzichini'. Espandile nei componenti gastronomici reali presenti in catalogo!
-   - In ciascuna SottoRicerca puoi specificare opzionalmente `reparto` ('CARNE', 'DISPENSA', 'FORMAGGI', 'GELO', 'MARE', 'SALUMI') e `sottocategoria` (valore ESATTO tra quelli elencati in tassonomia_sofood.SOTTOCATEGORIE_NOMI, sempre in MAIUSCOLO, es. 'OLIVE', 'TARALLI', 'PECORINO', 'SALAME': se non sei sicuro del valore esatto, lascia sottocategoria vuoto e usa solo reparto + query, la ricerca semantica farà il resto):
-     * Tris / ciotoline aperitivo da bar:
-       - SottoRicerca(reparto='DISPENSA', sottocategoria='TARALLI', query='taralli pugliesi grissini snack Farino')
-       - SottoRicerca(reparto='DISPENSA', sottocategoria='OLIVE', query='olive da tavola Bella di Cerignola')
-       - SottoRicerca(reparto='DISPENSA', sottocategoria='FRUTTA SECCA SENZA GUSCIO', query='anacardi mandorle tostate Calugi')
-      * Locale spagnolo / Tapas bar (Cluster Spagna Completo):
-        - SottoRicerca(reparto='SALUMI', query='prosciutto bellota 100% iberico chorizo salchichon Solera')
-        - SottoRicerca(reparto='SALUMI', query='cecina de leon Nieto')
-        - SottoRicerca(reparto='MARE', query='filetti acciughe cantabrico Medimer')
-        - SottoRicerca(reparto='DISPENSA', query='picos taralli snack Farino')
-      * Hamburgeria / Panini Gourmet / Pub:
-        - SottoRicerca(reparto='DISPENSA', query='buns classico mini burger Farino panini burger')
-        - SottoRicerca(reparto='CARNE', sottocategoria='HAMBURGER', query='hamburger fassona piemontese Oberto hamburger maiale nero Patrone')
-        - SottoRicerca(reparto='DISPENSA', query='maionese ketchup senape salsa aioli Biobontà peperone crusco Buongiorno')
-        - SottoRicerca(reparto='SALUMI', query='pancetta tesa in conca di marmo Adò pancetta cotta dello Zio Branchi')
-        - SottoRicerca(reparto='FORMAGGI', query='formaggio da fondere Crucolo Capriz La Casera')
-        - SottoRicerca(reparto='DISPENSA', sottocategoria='PATATINE', query='patatine di montagna con buccia Valle di Gresta')
-      * Cucina toscana / Tagliere toscano:
-        - SottoRicerca(reparto='SALUMI', query='finocchiona igp bastardo maremmano salame toscano lardo Franchi Salumi Ado')
-        - SottoRicerca(reparto='FORMAGGI', sottocategoria='PECORINO', query='pecorino toscano dop cacio e pepe cremosa san martino Formaggeria Toscana')
-        - SottoRicerca(reparto='DISPENSA', query='anacardi nocciole tartufo crostini Calugi')
-      * Cucina pugliese / Tagliere pugliese:
-        - SottoRicerca(reparto='SALUMI', query='capocollo di martina franca affumicato pancetta suino nero Salumi Martina Franca')
-        - SottoRicerca(reparto='FORMAGGI', query='pallone di gravina provolone pecora caciocavallo burrata La Ghianda Recco')
-        - SottoRicerca(reparto='DISPENSA', sottocategoria='OLIVE', query='taralli pugliesi grissini Farino olive bella di cerignola Capuano')
-      * Aperitivo di mare / Tagliere di pesce (la nuova tassonomia non ha una sottocategoria dedicata a "salumi/tartare di mare": lascia sottocategoria vuoto e affidati a reparto='MARE' + query mirata):
-       - SottoRicerca(reparto='MARE', query='bresaola tonno pancetta di tonno mortadella lardo di mare Italfish')
-       - SottoRicerca(reparto='MARE', query='tartare o carpaccio salmone tonno spada crudo Italfish')
-     * Dessert monoporzione per ristorazione/pub:
-        - SottoRicerca(reparto='GELO', sottocategoria='GELATI DESSERT', query='cremoso di bufala terracotta San Salvatore gelato dessert Menodiciotto')
-     * Menu completo o più portate (antipasti, primo, secondo, contorno, dolce):
-        - genera sotto-ricerche distinte per ciascuna portata richiesta (es. pasta/primo, secondo, contorno verdure, dolce), rispettando lo stile del locale (pesce o terra).
-     * Pinsa gourmet per pub/bistrò/ristorante:
-       - SottoRicerca(reparto='DISPENSA', sottocategoria='BASI PER PIZZA E IMPASTI', query='base pinsa romana precotta Farino')
-       - SottoRicerca(reparto='FORMAGGI', sottocategoria='MOZZARELLE', query='burrata stracciatella fior di latte')
-      * Sottoli o antipasti:
-        - SottoRicerca(reparto='DISPENSA', sottocategoria='SOTTOLI', query='carciofi grigliati pomodori secchi sottolio conserve De Giorgi')
-        - SottoRicerca(reparto='GELO', query='finger food frittelline pastellati Di Tria')
-      * Richieste multiple o composite con più prodotti/materie prime:
-        - Se il cliente elenca più ingredienti o categorie eterogenee nella stessa frase (es. "hai un pezzone di tonno e delle olive giganti? mi servono anche delle spezie che legano con il pesce"):
-        - DEVI generare OBBLIGATORIAMENTE una SottoRicerca separata per CIASCUNA entità richiesta!
-          Esempio:
-          * SottoRicerca(reparto='MARE', query='trancio lingotto tonno pinna gialla Italfish Smeralda')
-          * SottoRicerca(reparto='DISPENSA', query='olive giganti bella di cerignola vaso grande Capuano')
-          * SottoRicerca(reparto='DISPENSA', query='spezie preparato marinara erbe aromatiche pesce Boschi')
-        - È SEVERAMENTE VIETATO tranciare la richiesta o cercare solo l'ultimo prodotto menzionato!
-    - Se la richiesta riguarda una sola categoria/prodotto specifico, restituisci solo quella.
+REGOLE PER IL RIFERIMENTO PRECEDENTE:
+- Se il cliente dice "dimmene altri", "ancora", o "altri" senza specificare cosa, devi capire dallo STORICO a cosa si riferisce e impostare `riferimento_precedente`=true e `argomento_riferito` al dominio di cui parlavate.
 
-Rispondi rigorosamente ed esclusivamente con il JSON secondo lo schema fornito."""
-
+Rispondi rigorosamente con il JSON dello schema AnalisiUnificata.
+"""
     try:
         risposta = client_genai.models.generate_content(
-            model=MODELLO_FALLBACK, # Usa Flash Lite per non bruciare quote 
+            model=MODELLO_PRINCIPALE,  # Usiamo Flash 3.6 (modello principale) per maggiore accuratezza visto che fonde 3 chiamate in 1
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.0,
                 response_mime_type="application/json",
-                response_schema=AnalisiRichiesta,
+                response_schema=AnalisiUnificata,
             ),
         )
-        return AnalisiRichiesta.model_validate_json(risposta.text)
+        return AnalisiUnificata.model_validate_json(risposta.text)
     except Exception as e:
-        print(f"[ATTENZIONE] Analisi e profilazione fallita ({e}), fallback euristico.")
-        richiede_comp = any(p in f"{user_query} {testo_per_ricerca}".lower() for p in [
-            "tagliere", "tris", "aperitivo", "ciotoline", "menu", "menù", "degustazione", "abbinamento", "burger", "hamburger", "hamburge"
-        ])
-        tipo_c = "tagliere" if "tagliere" in user_query.lower() else ("tris_bar" if "tris" in user_query.lower() else ("panino" if any(b in user_query.lower() for b in ["burger", "hamburg", "panin"]) else "nessuna"))
-        return AnalisiRichiesta(
+        print(f"[ATTENZIONE] Analisi unificata fallita ({e}), fallback euristico.")
+        richiede_comp = any(p in user_query.lower() for p in ["tagliere", "tris", "aperitivo", "ciotoline", "menu", "menù", "burger", "hamburger"])
+        
+        # Fallback basico
+        fallback_element = ElementoRichiesto(
+            dominio="generale",
+            quantita=None,
+            query_ricerca=user_query
+        )
+        return AnalisiUnificata(
+            tipo_richiesta="conversazione_generica" if not richiede_comp else "composizione_piatto",
             richiede_composizione=richiede_comp,
-            tipo_composizione=tipo_c,
-            profilo=ProfiloClienteAggiornato(),
-            sotto_ricerche=[SottoRicerca(categoria="generale", query=testo_per_ricerca)]
+            riferimento_precedente=False,
+            argomento_riferito=None,
+            elementi_richiesti=[fallback_element],
+            profilo=ProfiloClienteAggiornato()
         )
 
 
@@ -575,55 +543,23 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
 
     contesto_conversazione = "\n".join(scambi_recenti) if scambi_recenti else "(Inizio conversazione, nessun messaggio precedente)"
 
-    # NOTA: questa riscrittura serve SOLO a risolvere pronomi/riferimenti impliciti
-    # ("quello da 500g", "sì", "altri?") in una query autonoma e cercabile.
-    # Non deve MAI introdurre marchi o fornitori che il cliente non ha nominato:
-    # farlo (come in una versione precedente di questo prompt) forzava sempre
-    # gli stessi fornitori nei risultati, indipendentemente dalla richiesta reale.
-        # 5-NODE ARCHITECTURE: NODO 1 e NODO 2 (Intent & Decomposer)
-    for tentat in range(3):
-        try:
-            # 1. Intent Classification
-            intent_res = classify_intent(user_query_clean, contesto_conversazione)
-            
-            # 2. Decomposer
-            tree = decompose_domain(user_query_clean, contesto_conversazione)
-            
-            # Map DecomposedTree to legacy piano_ricerca format for backward compatibility in retrieval_utils
-            piano_ricerca = {
-                "intento": "tagliere_o_ricetta" if intent_res.intent == "TAGLIERE_O_RICETTA" else "ricerca_catalogo",
-                "componenti": []
-            }
-            for slot in tree.slots:
-                piano_ricerca["componenti"].append({
-                    "ruolo": slot.macro_family.lower(),
-                    "quantita_target": slot.quantity,
-                    "sottocategoria_forzata": slot.forced_subcategory,
-                    "query_pulita": " ".join(slot.constraints.must_have),
-                    "esclusioni": slot.constraints.must_not_have
-                })
-                
-            queries = []
-            for comp in piano_ricerca.get("componenti", []):
-                q = comp.get("query_pulita")
-                if q:
-                    queries.append(q)
-            testo_per_ricerca = " ".join(queries) if queries else user_query_clean
-            
-            print(f"\\n[DEBUG RAG] Decomposer JSON generato: {piano_ricerca}\\n")
-            break
-        except Exception as e:
-            import time
-            if ("429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)) and tentat < 2:
-                time.sleep(4 * (tentat + 1))
-                continue
-            print(f"[ATTENZIONE] Riscrittura query fallita, uso l'originale. Errore: {e}")
-            testo_per_ricerca = user_query_clean
-            piano_ricerca = None
-            break
+    # ANALISI SEMANTICA UNIFICATA (Intent, Profile, RAG Elements)
+    analisi = analizza_richiesta_unificata(client_genai, user_query_clean, contesto_conversazione, stato)
 
-    # ANALISI SEMANTICA, PROFILAZIONE E DECOMPOSIZIONE STRUTTURATA (AI Engineer pipeline)
-    analisi = analizza_richiesta_e_profila(client_genai, user_query_clean, testo_per_ricerca, stato)
+    # Continuità conversazionale: se l'utente chiede "dimmene altri", recuperiamo l'argomento precedente
+    if analisi.riferimento_precedente and analisi.argomento_riferito:
+        ha_nuovi = any(e.dominio.lower() != "generale" for e in analisi.elementi_richiesti)
+        if not ha_nuovi:
+            from app import ElementoRichiesto
+            analisi.elementi_richiesti = [ElementoRichiesto(
+                dominio=analisi.argomento_riferito,
+                quantita=None,
+                query_ricerca=analisi.argomento_riferito
+            )]
+            
+    # Estrai la query di ricerca combinata per il fallback / checks testuali storici
+    queries = [e.query_ricerca for e in analisi.elementi_richiesti if e.query_ricerca]
+    testo_per_ricerca = " ".join(queries) if queries else user_query_clean
     if analisi.profilo.tipo_locale:
         stato["tipo_locale"] = analisi.profilo.tipo_locale.lower()
     if analisi.profilo.stile_cucina:
@@ -688,16 +624,16 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
         and not ha_parole_nuova_richiesta
         and not chiede_alternativa_o_nuovo_piatto
     )
+    
+    piano_ricerca = None
 
     # TRIGGER GASTRONOMICO: Se chiede approfondimento sui prodotti correnti esce dal ricettario!
     if chiede_dettagli_formati_correnti:
         usa_ricettario = False
-    elif chiede_alternativa_o_nuovo_piatto:
+    elif chiede_alternativa_o_nuovo_piatto and any(k in query_bassa_combinata for k in ["tagliere", "menu", "tris", "primo", "secondo", "aperitivo"]):
         usa_ricettario = True
     else:
-        usa_ricettario = analisi.richiede_composizione or any(p in query_bassa_combinata for p in [
-            "tagliere", "tris", "degustazione", "ciotoline", "menu", "menù", "abbinamento", "tapas", "burger", "hamburger"
-        ])
+        usa_ricettario = analisi.richiede_composizione
 
     contesto_ricetta = None
     ids_da_tracciare = []
@@ -849,31 +785,30 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
                             r["match_regionale"] = True
                             record_prodotti.append(r)
 
-            # 3. SOTTO-RICERCHE CON ESPANSIONE CONCETTUALE
-            sotto_ricerche = analisi.sotto_ricerche if analisi.sotto_ricerche else [SottoRicerca(categoria="generale", query=testo_per_ricerca)]
-            K_MINIMO_PER_CATEGORIA = 5
-            risultati_per_query = max(K_MINIMO_PER_CATEGORIA, N_RISULTATI_RAG // len(sotto_ricerche)) if sotto_ricerche else N_RISULTATI_RAG
+            def calcola_n_risultati(elemento, tipo_richiesta: str) -> int:
+                if tipo_richiesta == "panoramica_catalogo":
+                    return 20
+                elif getattr(elemento, "quantita", None) is not None:
+                    return max(elemento.quantita * 3, 10)
+                else:
+                    return 15
 
-            CATEGORIE_CATALOGO_MAP = {
-                "formaggi": "Formaggi", "formaggio": "Formaggi", "latticini": "Formaggi",
-                "salumi": "Salumi", "salume": "Salumi",
-                "carne": "Carne", "carni": "Carne",
-                "mare": "Mare", "pesce": "Mare", "conserve di mare": "Mare",
-                "dispensa": "Dispensa", "pasta": "Dispensa", "olio": "Dispensa", "conserve": "Dispensa", "snack": "Dispensa", "pane": "Dispensa", "panetteria": "Dispensa",
-                "gelo": "Gelo", "surgelati": "Gelo",
-                "bevande": "Dispensa", "birra": "Dispensa", "birre": "Dispensa",
-            }
+            elementi_da_cercare = analisi.elementi_richiesti if analisi.elementi_richiesti else []
+            if not elementi_da_cercare:
+                from app import ElementoRichiesto
+                elementi_da_cercare = [ElementoRichiesto(dominio="generale", query_ricerca=testo_per_ricerca)]
 
-            for sr in sotto_ricerche:
-                filtro_cat = CATEGORIE_CATALOGO_MAP.get(sr.categoria.lower().strip()) if sr.categoria else None
-                filtro_rep = sr.reparto.strip().upper() if sr.reparto else None
-                filtro_sotto = sr.sottocategoria.strip().upper() if sr.sottocategoria else None
+            for elem in elementi_da_cercare:
+                filtro_rep = elem.reparto.strip().upper() if elem.reparto else None
+                filtro_sotto = elem.sottocategoria.strip().upper() if elem.sottocategoria else None
 
+                n_risultati = calcola_n_risultati(elem, analisi.tipo_richiesta)
+                
                 risultati_parziali = cerca_prodotti(
-                    collezione, indice_codici_prodotto, embedder, sr.query,
-                    risultati_per_query, indice_fornitori=indice_fornitori,
+                    collezione, indice_codici_prodotto, embedder, elem.query_ricerca,
+                    n_risultati, indice_fornitori=indice_fornitori,
                     indice_testuale=indice_testuale,
-                    filtro_categoria=filtro_cat,
+                    filtro_categoria=None,
                     filtro_reparto=filtro_rep,
                     filtro_sottocategoria=filtro_sotto,
                     tipo_locale=stato.get("tipo_locale"),
@@ -881,9 +816,7 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
                     canale_locale=stato.get("canale_locale"),
                 )
                 if any(w in query_bassa_combinata for w in ["finger food", "frittellin", "pastellat", "aperitiv", "snack", "caldo", "caldi", "fritti", "fritto"]) and not any(w in query_bassa_combinata for w in ["gelato", "sorbetto", "dolce", "dessert"]):
-                    # Un finger food "caldo" non può essere un gelato: esclusione per
-                    # categoria merceologica (sottocategoria/reparto), non per nome
-                    # di fornitore, così vale per qualunque fornitore di gelati.
+                    # Un finger food "caldo" non può essere un gelato
                     risultati_parziali = [
                         r for r in risultati_parziali
                         if "gelato" not in str(r["metadata"].get("sottocategoria", "")).lower()
@@ -893,6 +826,7 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
                 for r in risultati_parziali:
                     if r["id"] not in id_visti:
                         id_visti.add(r["id"])
+                        r["dominio_assegnato"] = elem.dominio
                         record_prodotti.append(r)
 
             # Cap globale per fornitore su record_prodotti
@@ -999,7 +933,17 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
         info_profilo.append(f"- Dieta / Vincolo alimentare: {stato['filtro_dieta']}")
     blocco_profilo = "\n    [PROFILO CLIENTE MEMORIZZATO]\n    " + "\n    ".join(info_profilo) + "\n" if info_profilo else ""
 
-    prompt_finale = f"""{blocco_profilo}
+    istruzioni_conteggio = []
+    if getattr(analisi, "elementi_richiesti", None):
+        for elem in analisi.elementi_richiesti:
+            if getattr(elem, "quantita", None) is not None:
+                istruzioni_conteggio.append(f"- Categoria '{elem.dominio}': devi presentare ESATTAMENTE {elem.quantita} prodotti. Nè uno di più, nè uno di meno.")
+    
+    blocco_conteggi = ""
+    if istruzioni_conteggio:
+        blocco_conteggi = "\n[VINCOLI DI QUANTITA' OBBLIGATORI (Da rispettare rigorosamente)]\n" + "\n".join(istruzioni_conteggio) + "\n"
+
+    prompt_finale = f"""{blocco_profilo}{blocco_conteggi}
     [DATI RAG ESTRATTI DAL CATALOGO - USA QUESTE INFO PER RISPONDERE]
     {contesto_testuale}
 
@@ -1108,19 +1052,20 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
         testo_pulito = re.sub(r' \n', '\n', testo_pulito)
         testo_pulito = re.sub(r'\n ,', ',', testo_pulito)
         
-        # --- REFLECTION LOOP (Auto-Correzione) ---
-        esclusioni_richieste = []
-        if 'piano_ricerca' in locals() and piano_ricerca:
-            for c in piano_ricerca.get("componenti", []):
-                esclusioni_richieste.extend(c.get("esclusioni", []))
-                
-        if esclusioni_richieste and tentativo_riflessione == 0:
-            escl_str = ", ".join(esclusioni_richieste)
-            prompt_riflessione = f"L'utente NON vuole assolutamente questi ingredienti: {escl_str}.\nLa tua risposta li contiene per sbaglio? Rispondi solo 'ERRORE' se sì, altrimenti 'OK'.\n\nRISPOSTA:\n{testo_pulito}"
+        # --- REFLECTION LOOP (Auto-Correzione Multi-Dominio) ---
+        domini_mancanti = []
+        risposta_lower = testo_pulito.lower()
+        if getattr(analisi, "elementi_richiesti", None):
+            for elem in analisi.elementi_richiesti:
+                if elem.dominio.lower() != "generale" and elem.dominio.lower() not in risposta_lower:
+                    domini_mancanti.append(elem.dominio)
+
+        if domini_mancanti and tentativo_riflessione == 0:
+            prompt_riflessione = f"L'utente aveva richiesto esplicitamente di parlare anche di: {', '.join(domini_mancanti)}.\nLa tua risposta copre queste categorie o le ha dimenticate?\nRispondi solo 'MANCA' se le hai dimenticate, altrimenti 'OK'.\n\nRISPOSTA:\n{testo_pulito}"
             res_rif = client_genai.models.generate_content(model=MODELLO_FALLBACK, contents=prompt_riflessione)
-            if "ERRORE" in (res_rif.text or "").upper():
-                print(f"[REFLECTION] Errore rilevato: Ingredienti vietati ({escl_str}) inclusi per sbaglio. Rigenero la risposta.")
-                prompt_finale += f"\n\nATTENZIONE: Nella tua risposta precedente hai incluso un ingrediente espressamente vietato ({escl_str}). Questo è un errore grave. Riprova escludendolo totalmente."
+            if "MANCA" in (res_rif.text or "").upper():
+                print(f"[REFLECTION] Domini mancanti: {domini_mancanti}. Rigenero.")
+                prompt_finale += f"\n\nATTENZIONE: Nella risposta precedente ti sei scordato di trattare queste categorie richieste dall'utente: {', '.join(domini_mancanti)}. Riprova bilanciando la risposta in modo che copra TUTTE le richieste in egual misura, senza bloccarti su una sola categoria."
                 continue
                 
         break

@@ -86,27 +86,3 @@ RICHIESTA UTENTE:
             ]
         )
 
-def verify_domain_rules(board_products: list, rules_violations: list) -> VerificationResult:
-    """
-    NODO 4: Domain Rule Verifier
-    Riceve i prodotti selezionati e le eventuali violazioni rilevate staticamente dal Constraint Solver (domain_rules.py).
-    Se ci sono violazioni hardware (rules_violations), le inietta nel VerificationResult e boccia il board.
-    Inoltre, può applicare un giudizio gastronomico aggiuntivo.
-    """
-    if rules_violations:
-        from core.agent_topology import RuleViolation
-        v_list = []
-        for v in rules_violations:
-            v_list.append(RuleViolation(rule="HARD_CONSTRAINT_VIOLATION", description=v, offending_nodes=[]))
-            
-        return VerificationResult(
-            status="REJECTED",
-            score=4,
-            violations=v_list
-        )
-        
-    return VerificationResult(
-        status="APPROVED",
-        score=9,
-        violations=[]
-    )

@@ -904,33 +904,47 @@ def costruisci_contesto_testuale(record_prodotti: list, id_gia_mostrati: "set | 
     id_gia_mostrati = id_gia_mostrati or set()
     record_ordinati = sorted(record_prodotti, key=lambda r: 1 if r["id"] in id_gia_mostrati else 0)
 
+    # Raggruppamento per dominio assegnato
+    record_per_dominio = {}
+    for r in record_ordinati:
+        dom = r.get("dominio_assegnato", "generale")
+        if dom not in record_per_dominio:
+            record_per_dominio[dom] = []
+        record_per_dominio[dom].append(r)
+
     blocchi = []
-    for idx, r in enumerate(record_ordinati):
-        meta = r["metadata"]
-        prima_linea = r['document'].splitlines()[0] if r.get('document') else ""
-        nome_pulito = pulisci_nome_commerciale(prima_linea, meta.get('nome_fornitore', ''))
-        tag_match = "[MATCH ESATTO SU CODICE PRODOTTO — è a catalogo, non negarlo] " if r.get("match_esatto") else ""
-        tag_gia_visto = " [GIÀ MENZIONATO IN PRECEDENZA — se risponde a una caratteristica specifica chiesta dal cliente (es. prodotti caldi, fritti, surgelati, birre, o richiesta esplicita) proponilo con sicurezza, altrimenti dai priorità alle novità]" if r["id"] in id_gia_mostrati else ""
-
-        blocco = f"\n--- MATCH {idx + 1} (ID: {r['id']}){tag_gia_visto} ---\n"
-        blocco += f"{tag_match}Prodotto: {nome_pulito} (Produttore: {meta.get('nome_fornitore')})\n"
-        blocco += f"Reparto: {meta.get('reparto', 'N/A')} | Categoria: {meta.get('categoria_tassonomia', meta.get('categoria_prodotto'))} | Sottocategoria: {meta.get('sottocategoria', 'N/A')} | Codice: {meta.get('codice_prodotto')}\n"
-        blocco += f"Varianti: {meta.get('varianti_prodotto')}\n"
-
-        percorso_img = str(meta.get("percorso_immagine", "")).strip()
-        ha_img_reale = (
-            meta.get("ha_immagine_primaria")
-            and percorso_img
-            and percorso_img.lower() not in ("", "nan", "none", "false")
-            and os.path.exists(percorso_img)
-        )
-        if ha_img_reale:
-            blocco += f"Percorso File Immagine: {percorso_img}\n"
-        else:
-            blocco += "Immagine: NESSUNA FOTO A CATALOGO (NON inserire alcun tag [IMG] per questo prodotto)\n"
-
-        blocco += f"Scheda: {r['document']}\n"
-        blocchi.append(blocco)
+    idx_totale = 0
+    for dominio, recs in record_per_dominio.items():
+        if dominio != "generale":
+            blocchi.append(f"\n[=========== DOMINIO RICHIESTO: {dominio.upper()} ===========]")
+            
+        for r in recs:
+            idx_totale += 1
+            meta = r["metadata"]
+            prima_linea = r['document'].splitlines()[0] if r.get('document') else ""
+            nome_pulito = pulisci_nome_commerciale(prima_linea, meta.get('nome_fornitore', ''))
+            tag_match = "[MATCH ESATTO SU CODICE PRODOTTO] " if r.get("match_esatto") else ""
+            tag_gia_visto = " [GIÀ MENZIONATO IN PRECEDENZA]" if r["id"] in id_gia_mostrati else ""
+    
+            blocco = f"\n--- MATCH {idx_totale} (ID: {r['id']}){tag_gia_visto} ---\n"
+            blocco += f"{tag_match}Prodotto: {nome_pulito} (Produttore: {meta.get('nome_fornitore')})\n"
+            blocco += f"Reparto: {meta.get('reparto', 'N/A')} | Categoria: {meta.get('categoria_tassonomia', meta.get('categoria_prodotto'))} | Sottocategoria: {meta.get('sottocategoria', 'N/A')} | Codice: {meta.get('codice_prodotto')}\n"
+            blocco += f"Varianti: {meta.get('varianti_prodotto')}\n"
+    
+            percorso_img = str(meta.get("percorso_immagine", "")).strip()
+            ha_img_reale = (
+                meta.get("ha_immagine_primaria")
+                and percorso_img
+                and percorso_img.lower() not in ("", "nan", "none", "false")
+                and os.path.exists(percorso_img)
+            )
+            if ha_img_reale:
+                blocco += f"Percorso File Immagine: {percorso_img}\n"
+            else:
+                blocco += "Immagine: NESSUNA FOTO A CATALOGO (NON inserire tag [IMG] per questo)\n"
+    
+            blocco += f"Scheda: {r['document']}\n"
+            blocchi.append(blocco)
 
     # Aggiungo la lista riassuntiva dei fornitori disponibili
     fornitori_presenti = set()
