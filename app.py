@@ -284,17 +284,32 @@ Rispondi rigorosamente con il JSON dello schema AnalisiUnificata.
         print(f"[ATTENZIONE] Analisi unificata fallita ({e}), fallback euristico.")
         richiede_comp = any(p in user_query.lower() for p in ["tagliere", "tris", "aperitivo", "ciotoline", "menu", "menù", "burger", "hamburger"])
         
+        import re
+        def estrai_q(kws, txt):
+            for k in kws:
+                m = re.search(r'(\d+)\s+(?:\w+\s+){0,2}' + k, txt)
+                if m: return int(m.group(1))
+            return 2
+
         elementi_fb = []
         q_lower = user_query.lower()
-        if any(w in q_lower for w in ["salum", "prosciutt", "affettat", "coppa", "pancetta", "bresaola", "salam", "mortadella"]):
+        
+        salumi_kws = ["salum", "prosciutt", "affettat", "coppa", "pancetta", "bresaola", "salam", "mortadella"]
+        if any(w in q_lower for w in salumi_kws):
             q_salumi = "prosciutto crudo " if "prosciutt" in q_lower else ""
             q_salumi += "salumi affettati prosciutti"
-            elementi_fb.append(ElementoRichiesto(dominio="salumi", tipo_prodotto="salumi", query_ricerca=q_salumi, quantita=2))
-        if any(w in q_lower for w in ["formagg", "pecorino", "caciocavallo", "parmigiano", "mozzarella", "burrata"]):
-            elementi_fb.append(ElementoRichiesto(dominio="formaggi", tipo_prodotto="formaggi", query_ricerca="formaggi stagionati", quantita=2))
-        if any(w in q_lower for w in ["mare", "pesce", "ittico", "salmone", "tonno", "gamber", "polpo"]):
-            elementi_fb.append(ElementoRichiesto(dominio="mare", tipo_prodotto="prodotti di mare", query_ricerca="mare pesce ittico", quantita=2))
-        if any(w in q_lower for w in ["marmellat", "confettur", "miele", "crem", "sottoli", "pasta", "riso"]):
+            elementi_fb.append(ElementoRichiesto(dominio="salumi", tipo_prodotto="salumi", query_ricerca=q_salumi, quantita=estrai_q(salumi_kws, q_lower)))
+            
+        formaggi_kws = ["formagg", "pecorino", "caciocavallo", "parmigiano", "mozzarella", "burrata"]
+        if any(w in q_lower for w in formaggi_kws):
+            elementi_fb.append(ElementoRichiesto(dominio="formaggi", tipo_prodotto="formaggi", query_ricerca="formaggi stagionati", quantita=estrai_q(formaggi_kws, q_lower)))
+            
+        mare_kws = ["mare", "pesce", "ittico", "salmone", "tonno", "gamber", "polpo"]
+        if any(w in q_lower for w in mare_kws):
+            elementi_fb.append(ElementoRichiesto(dominio="mare", tipo_prodotto="prodotti di mare", query_ricerca="mare pesce ittico", quantita=estrai_q(mare_kws, q_lower)))
+            
+        dispensa_kws = ["marmellat", "confettur", "miele", "crem", "sottoli", "pasta", "riso"]
+        if any(w in q_lower for w in dispensa_kws):
             elementi_fb.append(ElementoRichiesto(dominio="dispensa", tipo_prodotto="dispensa", query_ricerca="marmellata conserve", quantita=1))
         
         if not elementi_fb:
