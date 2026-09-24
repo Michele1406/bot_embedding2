@@ -81,7 +81,7 @@ MODELLO_AUDIO = "models/gemini-2.5-flash"
 MODELLO_AUDIO_FALLBACK = "models/gemini-3.5-flash-lite"
 PERCORSO_DATABASE_VETTORIALE = "./database_vettoriale"
 NOME_COLLEZIONE = "catalogo_sofood"
-N_RISULTATI_RAG = 45  # Aumentato drasticamente per passare più prodotti all'IA e massimizzare la fairness
+N_RISULTATI_RAG = 65  # Aumentato per passare più prodotti all'IA e permettere taglieri grandi
 MAX_SCAMBI_STORICO = 7
 MAX_PRODOTTI_MOSTRATI_TRACCIATI = 60  # Aumentato per gestire i 45 prodotti
 
@@ -822,11 +822,11 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
 
             def calcola_n_risultati(elemento, tipo_richiesta: str) -> int:
                 if tipo_richiesta == "panoramica_catalogo":
-                    return 20
+                    return 25
                 elif getattr(elemento, "quantita", None) is not None:
-                    return max(elemento.quantita * 3, 10)
+                    return max(elemento.quantita * 6, 18)
                 else:
-                    return 15
+                    return 18
 
             elementi_da_cercare = analisi.elementi_richiesti if analisi.elementi_richiesti else []
             if not elementi_da_cercare:
