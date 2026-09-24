@@ -290,6 +290,12 @@ Rispondi rigorosamente con il JSON dello schema AnalisiUnificata.
             for k in kws:
                 m = re.search(r'(\d+)\s+(?:\w+\s+){0,2}' + k, txt)
                 if m: return int(m.group(1))
+            for k in kws:
+                m = re.search(k + r'\s+(?:\w+\s+){0,3}(\d+)', txt)
+                if m: return int(m.group(1))
+            m = re.findall(r'\b(\d+)\b', txt)
+            nums = [int(x) for x in m if 1 < int(x) <= 15]
+            if nums: return nums[0]
             return 2
 
         elementi_fb = []
