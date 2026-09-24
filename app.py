@@ -882,10 +882,14 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
                     ]
                 
                 if "tagliere" in query_bassa_combinata or "taglieri" in query_bassa_combinata:
+                    esclude_mare = "mare" not in query_bassa_combinata and "pesce" not in query_bassa_combinata
                     risultati_parziali = [
                         r for r in risultati_parziali
                         if "wurstel" not in str(r.get("document", "")).lower()
                         and "würstel" not in str(r.get("document", "")).lower()
+                        and "spalmabile" not in str(r.get("document", "")).lower()
+                        and "julienne" not in str(r.get("document", "")).lower()
+                        and not (esclude_mare and str(r["metadata"].get("reparto", "")).upper() == "MARE")
                     ]
                 for r in risultati_parziali:
                     if r["id"] not in id_visti:
