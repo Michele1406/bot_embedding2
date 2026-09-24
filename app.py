@@ -887,8 +887,9 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
                         r for r in risultati_parziali
                         if "wurstel" not in str(r.get("document", "")).lower()
                         and "würstel" not in str(r.get("document", "")).lower()
-                        and "spalmabile" not in str(r.get("document", "")).lower()
-                        and "julienne" not in str(r.get("document", "")).lower()
+                        and str(r["metadata"].get("sottocategoria", "")).upper() not in ["FORMAGGI FUSI", "PASTE FILATE USO CUCINA", "FORMAGGI FRESCHI INDUSTRIALI"]
+                        and "JULIENNE" not in str(r["metadata"].get("formato_variante_liv5", "")).upper()
+                        and "JULIENNE" not in str(r["metadata"].get("specifiche_liv4", "")).upper()
                         and not (esclude_mare and str(r["metadata"].get("reparto", "")).upper() == "MARE")
                     ]
                 for r in risultati_parziali:
