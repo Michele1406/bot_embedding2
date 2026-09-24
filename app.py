@@ -880,6 +880,13 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
                         and "gelato" not in str(r["metadata"].get("categoria_tassonomia", "")).lower()
                         and str(r["metadata"].get("reparto", "")).upper() != "GELO"
                     ]
+                
+                if "tagliere" in query_bassa_combinata or "taglieri" in query_bassa_combinata:
+                    risultati_parziali = [
+                        r for r in risultati_parziali
+                        if "wurstel" not in str(r.get("document", "")).lower()
+                        and "würstel" not in str(r.get("document", "")).lower()
+                    ]
                 for r in risultati_parziali:
                     if r["id"] not in id_visti:
                         id_visti.add(r["id"])
