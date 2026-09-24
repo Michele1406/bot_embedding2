@@ -263,6 +263,7 @@ REGOLE PER L'ESTRAZIONE DEGLI ELEMENTI (ElementoRichiesto):
 6. `query_ricerca`: formula una query semantica utile a trovare i prodotti di quel dominio. Usa parole chiave espansive.
    - Esempio pub: "buns panini burger Farino maionese"
    - Esempio mare: "bresaola tonno salmone affumicato Italfish"
+7. FRITTI E FINGER FOOD: Se il cliente chiede finger food, fritti, roba calda da rigenerare per aperitivi, DEVI USARE ASSOLUTAMENTE nella query_ricerca queste keyword magiche per trovarli nel database: "pastella frittelline pettole stick verdorate arancini crocchette di tria gelo". Altrimenti il database non troverà i nostri prodotti!
 
 REGOLE PER IL RIFERIMENTO PRECEDENTE:
 - Se il cliente dice "dimmene altri", "ancora", o "altri" senza specificare cosa, devi capire dallo STORICO a cosa si riferisce e impostare `riferimento_precedente`=true e `argomento_riferito` al dominio di cui parlavate.
@@ -311,6 +312,10 @@ Rispondi rigorosamente con il JSON dello schema AnalisiUnificata.
         dispensa_kws = ["marmellat", "confettur", "miele", "crem", "sottoli", "pasta", "riso"]
         if any(w in q_lower for w in dispensa_kws):
             elementi_fb.append(ElementoRichiesto(dominio="dispensa", tipo_prodotto="dispensa", query_ricerca="marmellata conserve", quantita=1))
+            
+        finger_kws = ["finger", "fritt", "cald", "rigenerare", "arancin", "crocchett", "snack", "tria"]
+        if any(w in q_lower for w in finger_kws):
+            elementi_fb.append(ElementoRichiesto(dominio="gelo", tipo_prodotto="fritti", query_ricerca="pastella frittelline pettole stick verdorate", quantita=estrai_q(finger_kws, q_lower)))
         
         if not elementi_fb:
             elementi_fb = [ElementoRichiesto(dominio="generale", quantita=None, query_ricerca=user_query)]
