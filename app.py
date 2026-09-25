@@ -293,16 +293,19 @@ Rispondi rigorosamente con il JSON dello schema AnalisiUnificata.
         richiede_comp = any(p in user_query.lower() for p in ["tagliere", "tris", "aperitivo", "ciotoline", "menu", "menù", "burger", "hamburger"])
         
         import re
+        numeri_liberi = [int(x) for x in re.findall(r'\b(\d+)\b', user_query) if 1 < int(x) <= 15]
+        
         def estrai_q(kws, txt):
+            # 1. Cerca prossimità stretta (numero prima o dopo la parola)
             for k in kws:
                 m = re.search(r'(\d+)\s+(?:\w+\s+){0,2}' + k, txt)
                 if m: return int(m.group(1))
             for k in kws:
                 m = re.search(k + r'\s+(?:\w+\s+){0,3}(\d+)', txt)
                 if m: return int(m.group(1))
-            m = re.findall(r'\b(\d+)\b', txt)
-            nums = [int(x) for x in m if 1 < int(x) <= 15]
-            if nums: return nums[0]
+            # 2. Assegnazione posizionale (consuma il primo numero libero disponibile)
+            if numeri_liberi:
+                return numeri_liberi.pop(0)
             return 2
 
         elementi_fb = []

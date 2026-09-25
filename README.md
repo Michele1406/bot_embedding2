@@ -2,95 +2,75 @@
 
 Benvenuto nel repository del progetto **Nino**, l'assistente virtuale B2B di So Food basato su architettura RAG (Retrieval-Augmented Generation) e modelli Gemini.
 
-## 🎯 1. Obiettivi del Progetto
+## 🎯 1. Cosa fa il Bot e Casi d'Uso Utili
 
 Il sistema non è un semplice motore di ricerca, ma un **Consulente Commerciale Virtuale** in grado di ragionare e assistere i clienti del settore Ho.Re.Ca. e Retail. 
 
-### Obiettivi Attuali (Raggiunti):
-1. **Consulenza sui Singoli Prodotti:** Capacità di navigare l'intero catalogo So Food, descrivendo le referenze con tono professionale, fornendo immagini, caratteristiche e suggerimenti di utilizzo.
-2. **Progettazione di Menu e Taglieri:** Capacità di ideare taglieri e piatti composti, rispettando vincoli dietetici (vegano, senza glutine), tematiche regionali e logiche di incompatibilità gastronomica.
-3. **Logica da Consulente B2B:** Ragionare non come un software, ma come un agente di vendita esperto che profila il cliente (capisce se è una pizzeria o un ristorante stellato) e adatta le proposte (es. suggerendo formati convenienza per volumi alti o eccellenze artigianali per boutique).
+### Usi Utili e Capacità:
+1. **Esplorazione Mirata del Catalogo:** L'utente può chiedere prodotti specifici (es. *"dammi 2 prosciutti crudi di cui 1 di Parma"*) e il bot comprende le gerarchie, distinguendo tra richieste generiche e denominazioni specifiche grazie al motore di ricerca ibrida.
+2. **Creazione di Taglieri e Composizioni:** Il bot è istruito per creare taglieri equilibrati. Se gli chiedi un tagliere di salumi e formaggi, scarta automaticamente prodotti fuori contesto (come wurstel, creme spalmabili, o formaggi tagliati a julienne) e garantisce varietà (es. alternando consistenze ed evitando troppi prodotti dello stesso fornitore).
+3. **Profilazione del Cliente (Gestione Stato):** Il bot ha memoria della conversazione e deduce il profilo del cliente (es. ristorante stellato vs pub). Usa queste informazioni per filtrare i prodotti (es. formato Horeca vs Retail) e adattare il tono di voce.
+4. **Filtri Dietetici e Allergie:** Capacità di applicare filtri rigidi (vegano, senza glutine, senza lattosio) scartando a priori i prodotti non idonei dal database vettoriale, prima ancora che l'LLM generi la risposta.
 
-### 🚀 Obiettivi Futuri (Roadmap):
-- **Effettuare Ordini:** Integrazione con il gestionale per permettere ai clienti di inserire ordini direttamente via chat.
-- **Stato Ordini e Tracking:** Possibilità per il cliente di chiedere "A che punto è la mia consegna di ieri?".
-- **Marketing Proattivo:** Aggiornare i clienti su nuove linee di prodotti e inviare comunicazioni commerciali mirate (es. "Abbiamo appena inserito il nuovo prosciutto spagnolo, ti interessa un campione per il tuo locale?").
+## 🏗️ 2. Come Funziona il Bot: L'Architettura Unificata
 
----
-
-## 🧠 2. La Sfida Logica: Ragionare come un Consulente
-
-La sfida più complessa del progetto non è estrarre testo, ma **insegnare a una macchina la logica commerciale e culinaria**. 
-
-Il tutto è intimamente **collegato alle schede prodotto della repository PRODOTTI SOFOOD**. L'AI non "inventa" le ricette, ma legge i metadati reali estratti da ChromaDB.
-I problemi affrontati durante lo sviluppo si concentrano su come far ragionare il bot con questi dati:
-
-- **Constraint Solving (Incompatibilità):** Evitare che il bot proponga due prodotti della stessa famiglia (es. Salame e Finocchiona) in un singolo tagliere, ignorando la varietà necessaria per un piatto professionale. Questo ha richiesto l'introduzione di una *matrice di incompatibilità* (`domain_rules.py`).
-- **Deviazioni Fuori Contesto:** Insegnare al bot che un ristorante di pesce non dovrebbe ricevere proposte di salumi di carne a meno di una richiesta specifica ("ospiti alternativi").
-- **Bilanciamento del Menu:** Assicurare eterogeneità nei piatti composti. *(Stato attuale: implementato parzialmente tramite le matrici di famiglia merceologica; i controlli di texture puri come croccante/morbido non sono ancora strutturati a livello di metadati).*
-- **Interpretazione del Formato:** Far comprendere al bot la differenza tra formati HORECA e RETAIL. *(Stato attuale: funzionante nella ricerca diretta tramite la profilazione del canale, ma in attesa di essere propagato alla pipeline di generazione automatica dei taglieri).*
-
----
-
-## 🏗️ 3. Come Funziona il Bot: Architettura
-
-Il flusso operativo si articola in 5 fasi tramite una pipeline intelligente:
+Il flusso operativo è stato recentemente ottimizzato in una **Pipeline Unificata** a chiamata singola per ridurre la latenza ed eliminare i bug della vecchia architettura a nodi. 
 
 ```mermaid
 flowchart TD
-    A[Input Utente: Testo o Audio] --> B[Trascrizione Vocale se Audio\nGemini 2.5 Flash]
-    B --> C[Analisi Semantica e Profilazione Dinamica\nTipo locale, Dieta, Attrezzatura]
-    C --> D[Motore di Ricerca Ibrida\ncore/retrieval_utils.py]
-    D --> E[Livello 1: Match Esatto per Codice]
-    D --> F[Livello 2: Match per Brand / Fornitore]
-    D --> G[Livello 3: Ricerca Vettoriale Semantica ChromaDB\ngemini-embedding-2]
-    D --> H[Livello 4: Template Ricettario per Taglieri e Piatti]
-    E & F & G & H --> I[Constraint Solver e Filtri Dietetici\ncore/domain_rules.py]
-    I --> J[Generazione Risposta\ncore/system_prompt_v2.py + Gemini]
-    J --> K[Post-Processing\nPulizia tag immagini]
-    K --> L[Rendering Web e Chat]
+    A[Input Utente: Testo o Audio] --> B[Analisi Unificata LLM\nEstrazione Profilo e ElementiRichiesti]
+    B -->|Se LLM va in timeout| B2[Fallback Euristico\nEstrazione Regex di Emergenza]
+    B --> C{Per ogni ElementoRichiesto}
+    B2 --> C
+    C --> D[Ricerca Ibrida in ChromaDB\ncore/retrieval_utils.py]
+    D --> E[Filtri Flessibili Tassonomia\nMatch su Sottocategoria, Liv4 e Nome]
+    E --> F[Filtri di Business\nFairness Fornitori, Wurstel/Mare/Julienne]
+    F --> G[Assemblaggio Risultati RAG]
+    G -->|Se risultati insufficienti| H[Active RAG Fallback\nAllenta i filtri e riprova]
+    H --> I[Generazione Risposta Finale\ncore/system_prompt_v2.py]
+    I --> J[Rendering UI / Invio al Client]
 ```
 
----
+L'architettura è **RAG (Retrieval-Augmented Generation)**: l'intelligenza artificiale non inventa mai i prodotti. Li cerca nel database vettoriale (ChromaDB) tramite ricerca semantica e filtri esatti, estrae i metadati reali (fornitore, codice, allergeni, descrizione) e li "imita" nella sua risposta per sembrare umana e persuasiva.
 
-## 📂 4. Struttura del Progetto
+## 📂 3. I File Principali (Sotto il Cofano)
 
 Per separare la logica del cervello dai compiti di routine, il progetto è diviso in pacchetti:
 
-### 🧠 Modulo `core/` (L'Intelligenza)
-Qui risiede tutta la logica decisionale e le regole di business:
-* **`app.py` & `main_chatbot_v2.py`** (nella root): Il server web Flask (con interfaccia WhatsApp-style) e la controparte da terminale.
-* **`system_prompt_v2.py`**: Definisce l'identità di Nino, le regole di tono di voce B2B e i vincoli generali.
-* **`retrieval_utils.py`**: Il motore di ricerca ibrida e l'algoritmo di composizione dei taglieri.
-* **`query_decomposer.py` & `agent_topology.py`**: L'architettura a nodi per scomporre le query complesse e classificare l'intento dell'utente.
-* **`domain_rules.py`**: Matrici di incompatibilità per evitare abbinamenti scorretti (es. due salumi macinati).
-* **`profilazione_locale.py` & `fornitori_config.py`**: Rilevamento del tipo di cliente (Horeca/Retail) e mappatura ufficiale dei marchi.
+### 🧠 Modulo Base e Core (L'Intelligenza)
+* **`app.py`**: Il cuore dell'applicazione web (Flask). Gestisce:
+  - Gli endpoint API (es. `/chat`).
+  - L'`AnalisiUnificata`: il primo prompt LLM che scompone la frase dell'utente (es. "3 formaggi") in oggetti `ElementoRichiesto`.
+  - Il **Fallback Euristico**: se l'API di Google va in crash (503), un sistema a espressioni regolari entra in azione per spezzare comunque la frase e garantire continuità.
+  - L'**Active RAG Fallback**: se la ricerca trova pochi risultati (es. filtro troppo rigido), riprova automaticamente allentando i filtri.
+  - I post-filtri di business (es. rimozione dei wurstel dai taglieri).
+* **`core/retrieval_utils.py`**: Il motore di ricerca. Contiene la funzione vitale `cerca_prodotti()`, che esegue:
+  - Match lessicale e vettoriale su ChromaDB.
+  - Filtri tassonomici flessibili (`_match_sottocategoria`) per trovare denominazioni specifiche ("Parma", "San Daniele") anche quando nascoste nel livello 4 o nel nome del prodotto.
+  - **Fairness Algorithm**: Impedisce a un singolo fornitore di monopolizzare i risultati raccomandati.
+* **`core/system_prompt_v2.py`**: Il file di personalità. Definisce il prompt di sistema finale (`SYSTEM_PROMPT_NINO`), istruendo il bot su come formattare la risposta (uso di Markdown, elenchi puntati), su come parlare (tono B2B cordiale) e su come gestire i link alle immagini.
+* **`core/domain_rules.py`**: Modulo storico che definisce matrici di incompatibilità e regole di dominio per la composizione vincolata di ricette pre-impostate.
+* **`core/tassonomia_sofood.py`**: Mappatura Python dell'albero delle categorie merceologiche (ECR Grocery) per validare i reparti.
 
 ### ⚙️ Modulo `scripts/` (Manutenzione e Dati)
-Questi file non girano durante le chat, ma servono per addestrare il bot e caricare i cataloghi:
-* **`caricaprodotti_v2.py` & `carica_ricettario.py`**: Muli da soma per leggere i file Excel e indicizzarli vettorialmente in ChromaDB.
-* **`carica_logistica_v2.py` & `carica_abstract_fornitori_v2.py`**: Per inserire regole di magazzino e filosofia dei produttori nel DB.
-* **`arricchisci_catalogo.py`**: Pipeline per usare l'AI per autogenerare tag e categorie mancanti sui prodotti.
-* **`ispettore_v2.py` & `addestratore.py`**: Tool per testare il DB offline e simulare chat per valutare le risposte.
-* **`genera_tassonomia_sofood.py`**: Esportazioni e rigenerazione dell'albero delle categorie.
+Questi script non vengono eseguiti durante la chat, ma servono per alimentare il cervello del bot:
+* **`caricaprodotti_v2.py`**: Legge il catalogo (Excel), genera gli embedding vettoriali per ogni prodotto e li inietta nel ChromaDB.
+* **`rigenera_tassonomia_db.py`**: Script di utilità per aggiornare massivamente i metadati tassonomici (livello 3 e livello 4) nel database vettoriale senza dover ricalcolare gli embedding.
 
 ### 🗄️ Directory Dati
-* **`database_vettoriale/`**: Database locale **ChromaDB** contenente le collezioni vettoriali (Prodotti, Ricette, Logistica).
-* **`log/chat/`**: Registro storico JSON delle conversazioni.
-* **`static/`**: Immagini, loghi e file audio temporanei.
+* **`database_vettoriale/`**: Il database locale **ChromaDB**. È la "memoria a lungo termine" del bot, contiene i documenti e i vettori matematici per la ricerca semantica.
+* **`static/`**: Contiene l'interfaccia frontend, il CSS stile-WhatsApp, loghi e script lato client.
 
----
-
-## 🚀 5. Guida Rapida all'Avvio
+## 🚀 4. Guida Rapida all'Avvio
 
 ### 1. Prerequisiti
-- File `.env` con `GEMINI_API_KEY=AIzaSy...`
+- File `.env` con la chiave `GEMINI_API_KEY=AIzaSy...`
 - Ambiente virtuale Python `(.venv)` attivato.
 
 ### 2. Avviare il Server Web
-- **Rapido**: Doppio clic su `avvia_bot.bat`.
-- **Terminale**: `.\.venv\Scripts\python.exe app.py`
-- Aperto su: **`http://127.0.0.1:5000`**
+- **Metodo rapido**: Doppio clic su `avvia_bot.bat`.
+- **Terminale (PowerShell)**: `.\.venv\Scripts\python.exe app.py`
+- L'interfaccia sarà disponibile all'indirizzo: **`http://127.0.0.1:5000`**
 
-### 3. Pubblicare il Bot Online
-Lancia `avvia_tunnel.bat` per ottenere un link pubblico `https://...trycloudflare.com` condivisibile con i clienti.
+### 3. Pubblicare il Bot Online (Tunneling)
+Esegui `avvia_tunnel.bat` (che usa Cloudflared o simili) per ottenere un link pubblico HTTPS temporaneo, ideale per far testare il bot a clienti e colleghi dall'esterno.
