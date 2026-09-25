@@ -299,10 +299,16 @@ Rispondi rigorosamente con il JSON dello schema AnalisiUnificata.
             # 1. Cerca prossimità stretta (numero prima o dopo la parola)
             for k in kws:
                 m = re.search(r'(\d+)\s+(?:\w+\s+){0,2}' + k, txt)
-                if m: return int(m.group(1))
+                if m: 
+                    num = int(m.group(1))
+                    if num in numeri_liberi: numeri_liberi.remove(num)
+                    return num
             for k in kws:
                 m = re.search(k + r'\s+(?:\w+\s+){0,3}(\d+)', txt)
-                if m: return int(m.group(1))
+                if m: 
+                    num = int(m.group(1))
+                    if num in numeri_liberi: numeri_liberi.remove(num)
+                    return num
             # 2. Assegnazione posizionale (consuma il primo numero libero disponibile)
             if numeri_liberi:
                 return numeri_liberi.pop(0)
@@ -314,19 +320,21 @@ Rispondi rigorosamente con il JSON dello schema AnalisiUnificata.
             ("salumi", ["salum", "prosciutt", "affettat", "coppa", "pancetta", "bresaola", "salam", "mortadella"], "salumi affettati prosciutti"),
             ("formaggi", ["formagg", "pecorino", "caciocavallo", "parmigiano", "mozzarella", "burrata"], "formaggi stagionati"),
             ("mare", ["mare", "pesce", "ittico", "salmone", "tonno", "gamber", "polpo"], "mare pesce ittico"),
-            ("dispensa", ["marmellat", "confettur", "miele", "crem", "sottoli", "pasta", "riso"], "marmellata conserve"),
+            ("dispensa", ["sottoli", "sottaceti", "marmellat", "confettur", "miele", "crem", "pasta", "riso"], "marmellata conserve sottoli"),
             ("gelo", ["finger", "fritt", "cald", "rigenerare", "arancin", "crocchett", "snack", "tria"], "pastella frittelline pettole stick verdorate")
         ]
 
         m_dicui_tutti = list(re.finditer(r'di cui\s+(\d+)\s+([a-zA-Z][a-zA-Z\s]*?)(?:\s*[,;]|\s+e\s+|\s*$)', q_lower))
         elementi_fb = []
         
-        for dominio, kws, base_query in domini_config:
+        for dominio, kws, default_query in domini_config:
             # Trova l'indice di prima comparsa del dominio
-            idx_dominio = min((q_lower.find(w) for w in kws if q_lower.find(w) != -1), default=-1)
+            matched_kw = next((w for w in kws if q_lower.find(w) != -1), None)
             
-            if idx_dominio != -1:
+            if matched_kw:
+                idx_dominio = q_lower.find(matched_kw)
                 q_base = estrai_q(kws, q_lower)
+                base_query = f"{dominio} {matched_kw} {default_query}"
                 # Cerca il primo 'di cui' disponibile che sia successivo alla comparsa del dominio
                 assegnato = False
                 for m_dicui in list(m_dicui_tutti):
