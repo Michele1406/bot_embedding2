@@ -74,11 +74,11 @@ if not GEMINI_API_KEY:
     raise ValueError("ATTENZIONE: GEMINI_API_KEY non trovata nel file .env")
 
 MODELLO_EMBEDDING = "models/gemini-embedding-2"
-MODELLO_PRINCIPALE = os.getenv("MODELLO_RISPOSTA", "models/gemini-3.5-flash")
-MODELLO_GEMINI = "models/gemini-3.5-flash-lite"
-MODELLO_FALLBACK = "models/gemini-3.5-flash-lite"
+MODELLO_PRINCIPALE = os.getenv("MODELLO_RISPOSTA", "models/gemini-3.6-flash")
+MODELLO_GEMINI = "models/gemini-3.6-flash"
+MODELLO_FALLBACK = "models/gemini-3.6-flash"
 MODELLO_AUDIO = "models/gemini-2.5-flash"
-MODELLO_AUDIO_FALLBACK = "models/gemini-3.5-flash-lite"
+MODELLO_AUDIO_FALLBACK = "models/gemini-3.6-flash"
 PERCORSO_DATABASE_VETTORIALE = "./database_vettoriale"
 NOME_COLLEZIONE = "catalogo_sofood"
 N_RISULTATI_RAG = 65  # Aumentato per passare più prodotti all'IA e permettere taglieri grandi
