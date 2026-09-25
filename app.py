@@ -310,54 +310,37 @@ Rispondi rigorosamente con il JSON dello schema AnalisiUnificata.
 
         elementi_fb = []
         q_lower = user_query.lower()
+        domini_config = [
+            ("salumi", ["salum", "prosciutt", "affettat", "coppa", "pancetta", "bresaola", "salam", "mortadella"], "salumi affettati prosciutti"),
+            ("formaggi", ["formagg", "pecorino", "caciocavallo", "parmigiano", "mozzarella", "burrata"], "formaggi stagionati"),
+            ("mare", ["mare", "pesce", "ittico", "salmone", "tonno", "gamber", "polpo"], "mare pesce ittico"),
+            ("dispensa", ["marmellat", "confettur", "miele", "crem", "sottoli", "pasta", "riso"], "marmellata conserve"),
+            ("gelo", ["finger", "fritt", "cald", "rigenerare", "arancin", "crocchett", "snack", "tria"], "pastella frittelline pettole stick verdorate")
+        ]
+
+        m_dicui_tutti = list(re.finditer(r'di cui\s+(\d+)\s+([a-zA-Z][a-zA-Z\s]*?)(?:\s*[,;]|\s+e\s+|\s*$)', q_lower))
+        elementi_fb = []
         
-        salumi_kws = ["salum", "prosciutt", "affettat", "coppa", "pancetta", "bresaola", "salam", "mortadella"]
-        if any(w in q_lower for w in salumi_kws):
-            q_salumi_base = estrai_q(salumi_kws, q_lower)
-            # Cerca pattern "di cui N <specificazione>" per spezzare richieste miste
-            m_dicui = re.search(r'di cui\s+(\d+)\s+(\w[\w\s]*?)(?:\s*[,;e]|\s*$)', q_lower)
-            if m_dicui and any(w in q_lower for w in salumi_kws):
-                q_spec = int(m_dicui.group(1))
-                spec_text = m_dicui.group(2).strip()
-                elementi_fb.append(ElementoRichiesto(dominio="salumi", query_ricerca=f"prosciutto {spec_text} salumi", quantita=q_spec, sottocategoria=spec_text.upper()))
-                if q_salumi_base > q_spec:
-                    elementi_fb.append(ElementoRichiesto(dominio="salumi", query_ricerca="salumi affettati prosciutti", quantita=q_salumi_base - q_spec))
-            else:
-                q_salumi = "prosciutto crudo " if "prosciutt" in q_lower else ""
-                q_salumi += "salumi affettati prosciutti"
-                elementi_fb.append(ElementoRichiesto(dominio="salumi", query_ricerca=q_salumi, quantita=q_salumi_base))
+        for dominio, kws, base_query in domini_config:
+            # Trova l'indice di prima comparsa del dominio
+            idx_dominio = min((q_lower.find(w) for w in kws if q_lower.find(w) != -1), default=-1)
             
-        formaggi_kws = ["formagg", "pecorino", "caciocavallo", "parmigiano", "mozzarella", "burrata"]
-        if any(w in q_lower for w in formaggi_kws):
-            q_formaggi_base = estrai_q(formaggi_kws, q_lower)
-            m_dicui_f = re.search(r'di cui\s+(\d+)\s+(\w[\w\s]*?)(?:\s*[,;e]|\s*$)', q_lower)
-            if m_dicui_f and any(w in q_lower for w in formaggi_kws):
-                # Se c'è un di cui e dei formaggi, assumiamo (come semplificazione fallback) 
-                # che se la parola formaggi/ecc appare vicina al di cui si riferisca a esso.
-                # Per semplicità cerchiamo l'ultimo di cui.
-                m_tutti = list(re.finditer(r'di cui\s+(\d+)\s+(\w[\w\s]*?)(?:\s*[,;e]|\s*$)', q_lower))
-                if m_tutti:
-                    # Prendi l'ultimo per i formaggi se ce ne sono più di uno
-                    m_dicui_f = m_tutti[-1]
-                q_spec_f = int(m_dicui_f.group(1))
-                spec_text_f = m_dicui_f.group(2).strip()
-                elementi_fb.append(ElementoRichiesto(dominio="formaggi", query_ricerca=f"formaggio {spec_text_f}", quantita=q_spec_f, sottocategoria=spec_text_f.upper()))
-                if q_formaggi_base > q_spec_f:
-                    elementi_fb.append(ElementoRichiesto(dominio="formaggi", query_ricerca="formaggi stagionati", quantita=q_formaggi_base - q_spec_f))
-            else:
-                elementi_fb.append(ElementoRichiesto(dominio="formaggi", query_ricerca="formaggi stagionati", quantita=q_formaggi_base))
-            
-        mare_kws = ["mare", "pesce", "ittico", "salmone", "tonno", "gamber", "polpo"]
-        if any(w in q_lower for w in mare_kws):
-            elementi_fb.append(ElementoRichiesto(dominio="mare", tipo_prodotto="prodotti di mare", query_ricerca="mare pesce ittico", quantita=estrai_q(mare_kws, q_lower)))
-            
-        dispensa_kws = ["marmellat", "confettur", "miele", "crem", "sottoli", "pasta", "riso"]
-        if any(w in q_lower for w in dispensa_kws):
-            elementi_fb.append(ElementoRichiesto(dominio="dispensa", tipo_prodotto="dispensa", query_ricerca="marmellata conserve", quantita=1))
-            
-        finger_kws = ["finger", "fritt", "cald", "rigenerare", "arancin", "crocchett", "snack", "tria"]
-        if any(w in q_lower for w in finger_kws):
-            elementi_fb.append(ElementoRichiesto(dominio="gelo", tipo_prodotto="fritti", query_ricerca="pastella frittelline pettole stick verdorate", quantita=estrai_q(finger_kws, q_lower)))
+            if idx_dominio != -1:
+                q_base = estrai_q(kws, q_lower)
+                # Cerca il primo 'di cui' disponibile che sia successivo alla comparsa del dominio
+                assegnato = False
+                for m_dicui in list(m_dicui_tutti):
+                    if m_dicui.start() > idx_dominio:
+                        q_spec = int(m_dicui.group(1))
+                        spec_text = m_dicui.group(2).strip()
+                        elementi_fb.append(ElementoRichiesto(dominio=dominio, query_ricerca=f"{dominio} {spec_text}", quantita=q_spec, sottocategoria=spec_text.upper()))
+                        if q_base > q_spec:
+                            elementi_fb.append(ElementoRichiesto(dominio=dominio, query_ricerca=base_query, quantita=q_base - q_spec))
+                        m_dicui_tutti.remove(m_dicui)
+                        assegnato = True
+                        break
+                if not assegnato:
+                    elementi_fb.append(ElementoRichiesto(dominio=dominio, query_ricerca=base_query, quantita=q_base))
         
         if not elementi_fb:
             elementi_fb = [ElementoRichiesto(dominio="generale", quantita=None, query_ricerca=user_query)]
