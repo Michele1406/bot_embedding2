@@ -1,4 +1,3 @@
-from core.agent_topology import IntentClassification
 from core.domain_rules import check_board_violations, prodotto_appartiene_a_famiglia, INCOMPATIBILITY_MATRIX
 """
 retrieval_utils.py
@@ -583,6 +582,24 @@ def componi_proposta_da_ricettario(richiesta_cliente: str, tipo_locale: "str | N
     return formatta_proposta_ricetta(template_scelto, slot_riempiti)
 
 
+def _match_sottocategoria(r, sc_lower: str) -> bool:
+    """Match flessibile su sottocategoria: cerca in sottocategoria (esatto),
+    specifiche_liv4 (contiene) e document (contiene con word boundary).
+    Risolve il bug per cui denominazioni come 'Parma', 'San Daniele', 'erborinato'
+    non matchano la sottocategoria ECR generica (es. 'SALUMI INTERI/TRANCI')."""
+    # 1. Match esatto sulla sottocategoria ECR
+    if sc_lower == str(r["metadata"].get("sottocategoria", "")).lower():
+        return True
+    # 2. Contenuto in specifiche_liv4 (es. "PROSC CRUDO PARMA" contiene "parma")
+    if sc_lower in str(r["metadata"].get("specifiche_liv4", "")).lower():
+        return True
+    # 3. Contenuto nel nome/descrizione prodotto (con word boundary per evitare falsi positivi)
+    doc = r.get("document", "").lower()
+    if re.search(r'\b' + re.escape(sc_lower) + r'\b', doc):
+        return True
+    return False
+
+
 def cerca_prodotti(collezione, indice_codici, embedder, user_query: str, n_risultati: int,
                     indice_fornitori: "dict | None" = None,
                     indice_testuale: "list | None" = None,
@@ -625,9 +642,9 @@ def cerca_prodotti(collezione, indice_codici, embedder, user_query: str, n_risul
 
     if filtro_sottocategoria:
         sc_lower = filtro_sottocategoria.lower()
-        esatti = [r for r in esatti if sc_lower == str(r["metadata"].get("sottocategoria", "")).lower()]
-        fornitori_match = [r for r in fornitori_match if sc_lower == str(r["metadata"].get("sottocategoria", "")).lower()]
-        lessicali_match = [r for r in lessicali_match if sc_lower == str(r["metadata"].get("sottocategoria", "")).lower()]
+        esatti = [r for r in esatti if _match_sottocategoria(r, sc_lower)]
+        fornitori_match = [r for r in fornitori_match if _match_sottocategoria(r, sc_lower)]
+        lessicali_match = [r for r in lessicali_match if _match_sottocategoria(r, sc_lower)]
     elif filtro_reparto:
         rep_lower = filtro_reparto.lower()
         esatti = [r for r in esatti if rep_lower == str(r["metadata"].get("reparto", "")).lower()]
@@ -645,7 +662,7 @@ def cerca_prodotti(collezione, indice_codici, embedder, user_query: str, n_risul
             collezione, query_embedding, n_risultati * 2,
             filtro_categoria=filtro_categoria,
             filtro_reparto=filtro_reparto,
-            filtro_sottocategoria=filtro_sottocategoria,
+            filtro_sottocategoria=None,  # Rimosso: ChromaDB applica solo uguaglianza esatta, il filtro flessibile è applicato post-retrieval
         )
     except Exception as e:
         print(f"[ATTENZIONE] Ricerca vettoriale fallita: {e}")
@@ -674,6 +691,10 @@ def cerca_prodotti(collezione, indice_codici, embedder, user_query: str, n_risul
         if r["id"] not in id_visti:
             combinati.append(r)
             id_visti.add(r["id"])
+
+    # Filtro flessibile sottocategoria post-retrieval (cerca in sottocategoria, specifiche_liv4, document)
+    if filtro_sottocategoria:
+        combinati = [r for r in combinati if _match_sottocategoria(r, filtro_sottocategoria.lower())]
 
     # FILTRO DIETETICO STRUTTURATO SU REPARTO (VEGANO / VEGETARIANO)
     # Priorità al campo strutturato vegano/vegetariano (SI/NO), che è il dato

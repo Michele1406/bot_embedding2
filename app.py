@@ -74,7 +74,7 @@ if not GEMINI_API_KEY:
     raise ValueError("ATTENZIONE: GEMINI_API_KEY non trovata nel file .env")
 
 MODELLO_EMBEDDING = "models/gemini-embedding-2"
-MODELLO_PRINCIPALE = os.getenv("MODELLO_RISPOSTA", "models/gemini-3.0-flash")
+MODELLO_PRINCIPALE = os.getenv("MODELLO_RISPOSTA", "models/gemini-3.5-flash")
 MODELLO_GEMINI = "models/gemini-3.5-flash-lite"
 MODELLO_FALLBACK = "models/gemini-3.5-flash-lite"
 MODELLO_AUDIO = "models/gemini-2.5-flash"
@@ -264,6 +264,13 @@ REGOLE PER L'ESTRAZIONE DEGLI ELEMENTI (ElementoRichiesto):
    - Esempio pub: "buns panini burger Farino maionese"
    - Esempio mare: "bresaola tonno salmone affumicato Italfish"
 7. FRITTI E FINGER FOOD: Se il cliente chiede finger food, fritti, roba calda da rigenerare per aperitivi, DEVI USARE ASSOLUTAMENTE nella query_ricerca queste keyword magiche per trovarli nel database: "pastella frittelline pettole stick verdorate arancini crocchette di tria gelo". Altrimenti il database non troverà i nostri prodotti!
+8. REGOLA CRUCIALE PER RICHIESTE MISTE NELLO STESSO DOMINIO ("di cui"):
+   Se l'utente chiede "N prodotti di cui M con attributo specifico", DEVI CREARE DUE ElementoRichiesto SEPARATI nello stesso dominio:
+   - Elemento 1: quantita=M, sottocategoria="attributo specifico" (es. "PARMA", "SAN DANIELE", "erborinato")
+   - Elemento 2: quantita=N-M, sottocategoria=None (generico)
+   Esempio: "3 formaggi di cui 1 erborinato" → Elemento(dominio="formaggi", quantita=1, sottocategoria="erborinato") + Elemento(dominio="formaggi", quantita=2, sottocategoria=None)
+   Esempio: "2 prosciutti di cui 1 parma" → Elemento(dominio="salumi", quantita=1, sottocategoria="PARMA") + Elemento(dominio="salumi", quantita=1, sottocategoria=None)
+   MAI accorpare attributi forzati con quantità miste in un solo elemento.
 
 REGOLE PER IL RIFERIMENTO PRECEDENTE:
 - Se il cliente dice "dimmene altri", "ancora", o "altri" senza specificare cosa, devi capire dallo STORICO a cosa si riferisce e impostare `riferimento_precedente`=true e `argomento_riferito` al dominio di cui parlavate.
@@ -303,13 +310,39 @@ Rispondi rigorosamente con il JSON dello schema AnalisiUnificata.
         
         salumi_kws = ["salum", "prosciutt", "affettat", "coppa", "pancetta", "bresaola", "salam", "mortadella"]
         if any(w in q_lower for w in salumi_kws):
-            q_salumi = "prosciutto crudo " if "prosciutt" in q_lower else ""
-            q_salumi += "salumi affettati prosciutti"
-            elementi_fb.append(ElementoRichiesto(dominio="salumi", tipo_prodotto="salumi", query_ricerca=q_salumi, quantita=estrai_q(salumi_kws, q_lower)))
+            q_salumi_base = estrai_q(salumi_kws, q_lower)
+            # Cerca pattern "di cui N <specificazione>" per spezzare richieste miste
+            m_dicui = re.search(r'di cui\s+(\d+)\s+(\w[\w\s]*?)(?:\s*[,;e]|\s*$)', q_lower)
+            if m_dicui and any(w in q_lower for w in salumi_kws):
+                q_spec = int(m_dicui.group(1))
+                spec_text = m_dicui.group(2).strip()
+                elementi_fb.append(ElementoRichiesto(dominio="salumi", query_ricerca=f"prosciutto {spec_text} salumi", quantita=q_spec, sottocategoria=spec_text.upper()))
+                if q_salumi_base > q_spec:
+                    elementi_fb.append(ElementoRichiesto(dominio="salumi", query_ricerca="salumi affettati prosciutti", quantita=q_salumi_base - q_spec))
+            else:
+                q_salumi = "prosciutto crudo " if "prosciutt" in q_lower else ""
+                q_salumi += "salumi affettati prosciutti"
+                elementi_fb.append(ElementoRichiesto(dominio="salumi", query_ricerca=q_salumi, quantita=q_salumi_base))
             
         formaggi_kws = ["formagg", "pecorino", "caciocavallo", "parmigiano", "mozzarella", "burrata"]
         if any(w in q_lower for w in formaggi_kws):
-            elementi_fb.append(ElementoRichiesto(dominio="formaggi", tipo_prodotto="formaggi", query_ricerca="formaggi stagionati", quantita=estrai_q(formaggi_kws, q_lower)))
+            q_formaggi_base = estrai_q(formaggi_kws, q_lower)
+            m_dicui_f = re.search(r'di cui\s+(\d+)\s+(\w[\w\s]*?)(?:\s*[,;e]|\s*$)', q_lower)
+            if m_dicui_f and any(w in q_lower for w in formaggi_kws):
+                # Se c'è un di cui e dei formaggi, assumiamo (come semplificazione fallback) 
+                # che se la parola formaggi/ecc appare vicina al di cui si riferisca a esso.
+                # Per semplicità cerchiamo l'ultimo di cui.
+                m_tutti = list(re.finditer(r'di cui\s+(\d+)\s+(\w[\w\s]*?)(?:\s*[,;e]|\s*$)', q_lower))
+                if m_tutti:
+                    # Prendi l'ultimo per i formaggi se ce ne sono più di uno
+                    m_dicui_f = m_tutti[-1]
+                q_spec_f = int(m_dicui_f.group(1))
+                spec_text_f = m_dicui_f.group(2).strip()
+                elementi_fb.append(ElementoRichiesto(dominio="formaggi", query_ricerca=f"formaggio {spec_text_f}", quantita=q_spec_f, sottocategoria=spec_text_f.upper()))
+                if q_formaggi_base > q_spec_f:
+                    elementi_fb.append(ElementoRichiesto(dominio="formaggi", query_ricerca="formaggi stagionati", quantita=q_formaggi_base - q_spec_f))
+            else:
+                elementi_fb.append(ElementoRichiesto(dominio="formaggi", query_ricerca="formaggi stagionati", quantita=q_formaggi_base))
             
         mare_kws = ["mare", "pesce", "ittico", "salmone", "tonno", "gamber", "polpo"]
         if any(w in q_lower for w in mare_kws):
@@ -861,7 +894,7 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
                         indice_testuale=indice_testuale,
                         filtro_categoria=None,
                         filtro_reparto=filtro_rep,
-                        filtro_sottocategoria=filtro_sotto,
+                        filtro_sottocategoria=None,  # Allentato: il filtro esatto ha già fallito, cerchiamo nel dominio ampio
                         tipo_locale=stato.get("tipo_locale"),
                         filtro_dieta=stato.get("filtro_dieta"),
                         canale_locale=stato.get("canale_locale"),
