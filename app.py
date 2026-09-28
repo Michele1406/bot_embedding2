@@ -12,7 +12,7 @@ import chromadb
 from pydantic import BaseModel
 from google import genai
 from google.genai import types
-from core.system_prompt_v2 import get_system_prompt
+from core.system_prompt_v2 import build_modular_prompt
 from core.retrieval_utils import (
     costruisci_indice_codici,
     costruisci_indice_fornitori,
@@ -36,7 +36,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
-from core.system_prompt_v2 import get_system_prompt
+from core.system_prompt_v2 import build_modular_prompt
 
 class ElementoRichiesto(BaseModel):
     dominio: str = Field(description="Es. 'salumi', 'formaggi', 'sottoli', 'mare', 'vino', 'dispensa'")
@@ -1051,7 +1051,11 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
     stato["prodotti_mostrati"] = set(stato["prodotti_mostrati_ordinati"])
 
     # Creazione prompt finale
-    prompt_di_sistema_completo = SYSTEM_PROMPT_NINO + carica_memoria_dinamica()
+    prompt_di_sistema_completo = build_modular_prompt(
+        analisi.tipo_richiesta,
+        stato.get("canale_locale", ""),
+        stato.get("filtro_dieta", "")
+    ) + "\n\n" + carica_memoria_dinamica()
 
     info_profilo = []
     if stato.get("tipo_locale"):
