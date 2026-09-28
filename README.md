@@ -19,14 +19,14 @@ Il flusso operativo usa una pipeline avanzata per estrarre informazioni, filtrar
 
 ```mermaid
 flowchart TD
-    A[Input Utente] --> B[Analizzatore LLM: Estrae Intenti & Profili]
-    B -->|Intent: Chiusura Ordine| Z[Estrattore Ordini]
-    Z --> Y[Webhook ERP Json]
-    B --> C[DB Vettoriale ChromaDB: Ricerca Semantica]
-    C --> D[Garbage Collector: Filtro Regole YAML e Diete]
-    D --> E[Fabbrica Prompt Modulare: Assemblaggio Istruzioni]
-    E --> F[Generatore Gemini: SSE Streaming]
-    F --> G[Frontend / Client WhatsApp]
+    A["Input Utente"] --> B["Analizzatore LLM: Estrae Intenti e Profili"]
+    B -->|"Intent: Chiusura Ordine"| Z["Estrattore Ordini"]
+    Z --> Y["Webhook ERP Json"]
+    B --> C["DB Vettoriale ChromaDB: Ricerca Semantica"]
+    C --> D["Garbage Collector: Filtro Regole YAML e Diete"]
+    D --> E["Fabbrica Prompt Modulare: Assemblaggio Istruzioni"]
+    E --> F["Generatore Gemini: SSE Streaming"]
+    F --> G["Frontend / Client WhatsApp"]
 ```
 
 L'architettura **RAG** interroga il database locale (ChromaDB) tramite ricerca vettoriale. Questo impedisce le *allucinazioni*: l'intelligenza artificiale non inventa mai referenze, ma legge le schede del database e le presenta al cliente.
