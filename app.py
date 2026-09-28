@@ -704,6 +704,11 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
         try:
             ha_gia_prodotti = len(stato.get("prodotti_mostrati", set())) > 0
             target_salumi, target_formaggi = None, None
+            for elem in analisi.elementi_richiesti:
+                if elem.dominio.lower() == "salumi" and getattr(elem, "quantita", None) is not None:
+                    target_salumi = elem.quantita
+                elif elem.dominio.lower() == "formaggi" and getattr(elem, "quantita", None) is not None:
+                    target_formaggi = elem.quantita
 
             # Determinazione categoria/portata ereditata dal piatto precedente se la query è anaforica o di variante
             categoria_ereditata = None

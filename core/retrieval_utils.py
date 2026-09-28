@@ -463,7 +463,7 @@ def componi_proposta_da_ricettario(richiesta_cliente: str, tipo_locale: "str | N
     query_ibrida = f"{richiesta_cliente} {tipo_locale or ''}"
     
     try:
-        q_emb = embedder.get_embedding(query_ibrida)
+        q_emb = embedder.embed_query(query_ibrida)
         res = collezione_ricette.query(
             query_embeddings=[q_emb],
             n_results=10,
@@ -1597,9 +1597,12 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
         # mostarde/marmellate/miele, forziamo quel ruolo indipendentemente
         # dalla regione (cercando in qualunque cluster le abbia a catalogo).
         vuole_mostarda_esplicita = any(k in query_utente.lower() for k in ["confettur", "marmellat", "mostard", "compost", "miele"])
+        vuole_sottoli_espliciti = any(k in query_utente.lower() for k in ["sottoli", "sott'oli", "sott'olio", "carciofin", "olive"])
         ordine_specialita = ["mostarde_confetture", "sottoli", "snack_secco"] if vuole_mostarda_esplicita else ["sottoli", "mostarde_confetture", "snack_secco"]
         for ruolo_extra in ordine_specialita:
-            regioni_da_provare = [regione] if not vuole_mostarda_esplicita else list(TEMI_REGIONALI.keys())
+            # Se l'utente ha chiesto espressamente una specialità (es. mostarda O sottoli), espandiamo la ricerca a tutte le regioni
+            espandi_regioni = vuole_mostarda_esplicita or (vuole_sottoli_espliciti and ruolo_extra == "sottoli")
+            regioni_da_provare = [regione] if not espandi_regioni else list(TEMI_REGIONALI.keys())
             trovato = False
             for reg_prova in regioni_da_provare:
                 if not elenco_fornitori_per_ruolo_regione(ruolo_extra, reg_prova):
