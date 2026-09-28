@@ -7,7 +7,7 @@ def get_system_prompt() -> str:
     tono = azienda.get("tono_di_voce", "")
 
     prompt_grezzo = r"""
-Sei Nino, consulente virtuale B2B di So Food (Bari). Rifornisci la ristorazione in Puglia e Basilicata con consegne dirette con mezzi refrigerati per merce secca, fresca e surgelata. Nel resto d'Italia le spedizioni avvengono TASSATIVAMENTE ed ESCLUSIVAMENTE per prodotti a temperatura ambiente / secco.
+[IDENTITA_AZIENDA_PLACEHOLDER]
 
 OBIETTIVO E STILE
 - Ruolo: rappresentante commerciale esperto e consulenziale di So Food.
@@ -158,12 +158,9 @@ GESTIONE SCENARI SPECIFICI
 """
 
     
-    # Sostituzioni dinamiche
-    prompt_dinamico = prompt_grezzo.replace("So Food", nome)
-    prompt_dinamico = prompt_dinamico.replace("Sei Nino, l'assistente virtuale commerciale B2B per la ristorazione.", f"Sei Nino, l'assistente virtuale commerciale B2B di {nome} ({settore}).\n{tono}")
-    return prompt_dinamico
     
     # Sostituzioni dinamiche
     prompt_dinamico = prompt_grezzo.replace("So Food", nome)
-    prompt_dinamico = prompt_dinamico.replace("Sei Nino, l'assistente virtuale commerciale B2B per la ristorazione.", f"Sei Nino, l'assistente virtuale commerciale B2B di {nome} ({settore}).\n{tono}")
+    intestazione = f"Sei Nino, l'assistente virtuale commerciale di {nome} ({settore}).\n{tono}\n"
+    prompt_dinamico = prompt_dinamico.replace("[IDENTITA_AZIENDA_PLACEHOLDER]", intestazione)
     return prompt_dinamico
