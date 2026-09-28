@@ -48,8 +48,9 @@ def rileva_canale_locale(tipo_locale: "str | None") -> str:
     if not tipo_locale:
         return "misto"
     t = tipo_locale.strip().lower()
-    is_horeca = any(k in t for k in TIPI_LOCALE_HORECA)
-    is_retail = any(k in t for k in TIPI_LOCALE_RETAIL)
+    import re
+    is_horeca = any(re.search(r"\b" + re.escape(k) + r"\b", t) for k in TIPI_LOCALE_HORECA)
+    is_retail = any(re.search(r"\b" + re.escape(k) + r"\b", t) for k in TIPI_LOCALE_RETAIL)
     if is_horeca and is_retail:
         return "misto"
     if is_horeca:

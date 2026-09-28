@@ -1235,7 +1235,7 @@ def rileva_cluster_regionale(testo: str) -> "str | None":
     t_lower = testo.lower()
     for reg, cfg in TEMI_REGIONALI.items():
         parole = cfg.get("parole_chiave", [])
-        if parole and any(re.search(r"\b" + re.escape(w), t_lower) for w in parole):
+        if parole and any(re.search(r"\b" + re.escape(w) + r"\b", t_lower) for w in parole):
             return reg
     return None
 

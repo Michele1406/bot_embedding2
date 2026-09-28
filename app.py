@@ -312,7 +312,7 @@ Rispondi rigorosamente con il JSON dello schema AnalisiUnificata.
             # 2. Assegnazione posizionale (consuma il primo numero libero disponibile)
             if numeri_liberi:
                 return numeri_liberi.pop(0)
-            return 2
+            return None
 
         elementi_fb = []
         q_lower = user_query.lower()
@@ -1199,6 +1199,10 @@ def chat():
     # Intercettazione della correzione di addestramento
     comando_normalizzato = user_query.strip().lower()
     if comando_normalizzato.startswith("!impara"):
+        # Misura di sicurezza: l'apprendimento libero è disabilitato in produzione
+        if os.getenv("ENABLE_IMPARA", "0") != "1":
+            return jsonify({"reply": "🚫 Il comando di addestramento <b>!impara</b> è attualmente disabilitato per motivi di sicurezza."})
+            
         resto = user_query.strip()[len("!impara"):].lstrip(":").strip()
         if not resto:
             return jsonify({"reply": (
@@ -1281,9 +1285,19 @@ def servi_logo():
 
 @app.route("/immagine")
 def servi_immagine():
-    """Questa rotta riceve il percorso C:\\... dal browser e gli invia il file JPEG reale"""
+    """Questa rotta riceve il percorso dal browser e gli invia il file immagine reale.
+    Aggiunto controllo estensioni per prevenire Path Traversal su file critici (.env, .py)."""
     percorso = request.args.get("path")
-    if percorso and os.path.exists(percorso):
+    if not percorso:
+        return "Percorso non fornito", 400
+        
+    percorso = os.path.normpath(percorso)
+    estensioni_valide = ('.jpg', '.jpeg', '.png', '.webp', '.gif')
+    
+    if not percorso.lower().endswith(estensioni_valide):
+        return "Accesso negato: il file richiesto non è un'immagine valida.", 403
+        
+    if os.path.exists(percorso):
         return send_file(percorso)
     return "Immagine non trovata o percorso non valido", 404
 
