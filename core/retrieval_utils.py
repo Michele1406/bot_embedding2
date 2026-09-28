@@ -35,6 +35,19 @@ distingue il contesto ed è un elenco infinito da manutenere).
 import os
 import re
 import json
+def parse_db_json_field(val, default=None):
+    if default is None:
+        default = []
+    if not val or str(val).lower() == 'nan':
+        return default
+    if isinstance(val, list) or isinstance(val, dict):
+        return val
+    try:
+        import json
+        return json.loads(val)
+    except Exception:
+        return [x.strip() for x in str(val).split(',') if x.strip()]
+
 
 from core.fornitori_config import (
     FORNITORI,
@@ -475,8 +488,8 @@ def componi_proposta_da_ricettario(richiesta_cliente: str, tipo_locale: "str | N
                 "id_ricetta": d_id,
                 "nome_piatto": meta.get("nome_piatto", "Senza Nome"),
                 "categoria": meta.get("categoria", "sconosciuta"),
-                "slot": json.loads(meta.get("slot", "[]")),
-                "canali_sconsigliati": json.loads(meta.get("canali_sconsigliati", "[]"))
+                "slot": parse_db_json_field(meta.get("ingredienti_json", meta.get("slot", "[]"))),
+                "canali_sconsigliati": parse_db_json_field(meta.get("canali_sconsigliati", "[]"))
             })
     except Exception as e:
         print(f"Errore ricerca ricette: {e}")
@@ -609,7 +622,7 @@ def cerca_prodotti(collezione, indice_codici, embedder, user_query: str, n_risul
                     tipo_locale: "str | None" = None,
                     filtro_dieta: "str | None" = None,
                     canale_locale: "str | None" = None,
-                    esclusioni: "list | None" = None) -> list:
+                    esclusioni: "list | None" = None, intento: str = None) -> list:
     """Punto di ingresso unico: combina match esatti per codice + match per
     fornitore + match lessicale per nome + ricerca vettoriale, deduplicando per id (il match esatto ha
     sempre precedenza), con un cap per fornitore adattivo (non hardcoded per singola categoria/brand:
@@ -696,129 +709,60 @@ def cerca_prodotti(collezione, indice_codici, embedder, user_query: str, n_risul
     if filtro_sottocategoria:
         combinati = [r for r in combinati if _match_sottocategoria(r, filtro_sottocategoria.lower())]
 
-    # FILTRO DIETETICO STRUTTURATO SU REPARTO (VEGANO / VEGETARIANO)
-    # Priorità al campo strutturato vegano/vegetariano (SI/NO), che è il dato
-    # affidabile. Il controllo testuale interviene SOLO come rete di sicurezza
-    # per i reparti non categoricamente esclusi (es. un ragù di verdure nel
-    # reparto Dispensa) ed è negation-aware: "senza carne" non fa più
-    # scattare l'esclusione per la presenza della parola "carne".
+    
+    # ==========================================
+    # FASE 3: IL MOTORE A REGOLE (Garbage Collector)
+    # ==========================================
+    from core.config_manager import get_regole_tagliere, get_regole_dieta, is_reparto_escluso_da_rag, is_categoria_documentale
+    
+    # 1. Filtro Assoluto Documentale/Aziendale (Vale SEMPRE)
+    filtrati_base = []
+    for r in combinati:
+        rep = str(r["metadata"].get("reparto", "")).upper()
+        cat = str(r["metadata"].get("categoria", "")).upper()
+        if is_reparto_escluso_da_rag(rep) or is_categoria_documentale(cat):
+            continue
+        filtrati_base.append(r)
+    combinati = filtrati_base
+
+    # 2. Filtro Tagliere (Solo se l'intento lo richiede)
+    if intento == "tagliere_o_ricetta":
+        regole_tagliere = get_regole_tagliere()
+        rep_vietati = [r.upper() for r in regole_tagliere.get("reparti_vietati", [])]
+        sc_vietate = [s.upper() for s in regole_tagliere.get("sottocategorie_vietate", [])]
+        
+        filtrati_tagliere = []
+        for r in combinati:
+            rep = str(r["metadata"].get("reparto", "")).upper()
+            sc = str(r["metadata"].get("sottocategoria", "")).upper()
+            if rep in rep_vietati or sc in sc_vietate:
+                continue
+            filtrati_tagliere.append(r)
+        combinati = filtrati_tagliere
+
+    # 3. Filtro Dietetico Dinamico (YAML)
     if filtro_dieta:
-        fd_lower = filtro_dieta.lower()
+        regole_dieta = get_regole_dieta(filtro_dieta.lower())
+        rep_vietati_dieta = [r.upper() for r in regole_dieta.get("esclude_reparti", [])]
+        sc_vietate_dieta = [s.upper() for s in regole_dieta.get("esclude_sottocategorie", [])]
+        flag_assoluto = regole_dieta.get("richiede_flag_assoluto", "")
+        
         filtrati_dieta = []
         for r in combinati:
             rep = str(r["metadata"].get("reparto", "")).upper()
-            doc_basso = r.get("document", "").lower()
-            is_veg = str(r["metadata"].get("vegano", "")).upper()
-            is_vgt = str(r["metadata"].get("vegetariano", "")).upper()
-
-            if fd_lower == "vegano":
-                if rep in ["CARNE", "SALUMI", "FORMAGGI", "MARE"]:
-                    continue
-                if is_veg.startswith("NO") and any(
-                    _termine_presente_non_negato(doc_basso, t)
-                    for t in ("carne", "latte", "formaggio", "uov", "miele", "strutto")
-                ):
-                    continue
-            elif fd_lower == "vegetariano":
-                if rep in ["CARNE", "SALUMI", "MARE"]:
-                    continue
-                if is_vgt.startswith("NO") and any(
-                    _termine_presente_non_negato(doc_basso, t)
-                    for t in ("carne", "pesce", "strutto", "tonno", "acciug")
-                ):
-                    continue
-            elif fd_lower == "senza_glutine":
-                is_sg = str(r["metadata"].get("senza_glutine", "")).upper()
-                if is_sg.startswith("NO"):
-                    # Filtro molto stringente sui reparti a rischio (pasta, pane, dolci, panati)
-                    # a meno che non ci sia scritto esplicitamente "senza glutine" nel testo
-                    if rep in ["PANIFICATI E SOSTITUTIVI", "PASTA", "PASTA FRESCA", "DOLCI E DESSERT"] and not any(w in doc_basso for w in ["senza glutine", "gluten free"]):
-                        continue
-                    # E una blacklist di parole nel documento
-                    if any(_termine_presente_non_negato(doc_basso, t) for t in ("glutine", "frumento", "farina di grano", "orzo", "farro", "kamut", "seitan", "pangrattato", "panat", "infarinat")):
-                        continue
+            sc = str(r["metadata"].get("sottocategoria", "")).upper()
+            flag_v = str(r["metadata"].get("vegano" if filtro_dieta.lower() == "vegano" else "vegetariano", "")).strip().upper()
+            
+            if rep in rep_vietati_dieta:
+                continue
+            if sc in sc_vietate_dieta:
+                continue
+            if flag_assoluto and flag_v and flag_v != flag_assoluto:
+                continue
+                
             filtrati_dieta.append(r)
         combinati = filtrati_dieta
 
-    # FILTRO CANALE PIZZERIA: le pizzerie NON comprano basi precotte Pinsa/Pizza/Padellino Farino
-    if tipo_locale and tipo_locale.lower() == "pizzeria":
-        filtrati_pizzeria = []
-        for r in combinati:
-            sc = str(r["metadata"].get("sottocategoria", "")).lower()
-            cod = str(r["metadata"].get("codice_prodotto", "")).upper()
-            doc_basso = r.get("document", "").lower()
-            if sc == "basi per pizza e impasti" or cod == "FARINO10" or any(p in doc_basso for p in ["base pinsa", "base pizza", "base padellino", "pinsa precotta"]):
-                continue
-            filtrati_pizzeria.append(r)
-        combinati = filtrati_pizzeria
-
-    # FILTRO CANALE BAR: niente pasta cruda da cuocere o carni crude da macelleria
-    if tipo_locale and tipo_locale.lower() == "bar" and not any(k in query_lower for k in ["pasta", "primo", "carne", "cucina"]):
-        filtrati_bar = []
-        for r in combinati:
-            rep = str(r["metadata"].get("reparto", "")).upper()
-            sc = str(r["metadata"].get("sottocategoria", "")).lower()
-            doc_basso = r.get("document", "").lower()
-            if rep == "CARNE" and any(w in doc_basso for w in ["coscia da battere", "trita", "macinato", "tagliata"]):
-                continue
-            if sc in ["pasta secca di semola", "pasta fresca", "pasta integrale e speciali"]:
-                continue
-            filtrati_bar.append(r)
-        combinati = filtrati_bar
-
-    # REGOLA RISOTTO ALL'ONDA E MANTECATURA: escludi Riso Nero / Riso Venere e dai priorità a Carnaroli
-    if "risotto" in query_lower:
-        filtrati_risotto = []
-        for r in combinati:
-            doc_basso = r.get("document", "").lower()
-            if any(k in doc_basso for k in ["riso nero", "riso venere", "integrale nero"]):
-                continue
-            filtrati_risotto.append(r)
-        combinati = filtrati_risotto
-
-    # BOOST DI COERENZA CANALE (HORECA / RETAIL)
-    # Sostituisce il vecchio boost "solo horeca per la ristorazione": ora vale
-    # anche il caso inverso (bottega/negozio -> formati retail). È un boost di
-    # ordinamento, non un filtro: se per un prodotto esiste solo un formato,
-    # resta comunque proponibile a qualsiasi canale.
-    if canale_locale in ("horeca", "retail"):
-        def punteggio_canale(r):
-            formato = rileva_formato_prodotto(r.get("document", ""))
-            return punteggio_coerenza_canale(canale_locale, formato)
-        combinati.sort(key=punteggio_canale, reverse=True)
-
-    # BOOST INTELLIGENTE SPEZIE BOSCHI SULLA BASE DEI METADATI GASTRONOMICI
-    if is_spice_query:
-        target_field = None
-        if any(w in query_lower for w in ["pesce", "marinara", "mare", "tonno", "salmone", "crostacei", "polpo", "spigola", "orata"]):
-            target_field = "buono_per_pesce"
-        elif any(w in query_lower for w in ["carne", "manzo", "maiale", "bistecca", "tagliata", "pollo", "arrosto", "bbq", "grigliat", "rub", "hamburger", "burger"]):
-            target_field = "buono_per_carne"
-        elif any(w in query_lower for w in ["patat", "chips", "fritt"]):
-            target_field = "buono_per_patate"
-        elif any(w in query_lower for w in ["pasta", "primi", "spaghett", "risott", "sugo", "ragù", "soffritt"]):
-            target_field = "buono_per_primi"
-        elif any(w in query_lower for w in ["pizza", "pinsa", "focacc", "bruschett"]):
-            target_field = "buono_per_pizza"
-        elif any(w in query_lower for w in ["verdur", "insalat", "zupp", "legum"]):
-            target_field = "buono_per_verdure"
-        elif any(w in query_lower for w in ["dolc", "dessert", "torta"]):
-            target_field = "buono_per_dolci"
-
-        def punteggio_spezia(r):
-            meta = r.get("metadata", {})
-            if str(meta.get("codice_fornitore", "")) == "19010829" or "boschi" in str(meta.get("nome_fornitore", "")).lower():
-                if target_field:
-                    val = meta.get(target_field)
-                    if val is True or str(val).lower() == "true":
-                        if target_field == "buono_per_carne" and (meta.get("buono_per_bbq") is True or str(meta.get("buono_per_bbq", "")).lower() == "true"):
-                            return 15
-                        return 12
-                    return 2
-                return 5
-            return 0
-        combinati.sort(key=punteggio_spezia, reverse=True)
-    # FILTRO ESCLUSIONI LESSICALI
     if esclusioni:
         filtrati_esclusioni = []
         for r in combinati:
@@ -1116,7 +1060,7 @@ def trova_template_ricetta(collezione_ricette, embedder, richiesta_cliente: str,
                 "nome_piatto": meta["nome_piatto"],
                 "categoria": meta["categoria"],
                 "note_composizione": meta.get("note_composizione", ""),
-                "ingredienti": json.loads(meta["ingredienti_json"]),
+                "ingredienti": parse_db_json_field(meta.get("ingredienti_json", "[]")),
                 "distanza": distanza,
             })
 

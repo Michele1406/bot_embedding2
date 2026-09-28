@@ -854,11 +854,11 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
 
             def calcola_n_risultati(elemento, tipo_richiesta: str) -> int:
                 if tipo_richiesta == "panoramica_catalogo":
-                    return 25
+                    return 60
                 elif getattr(elemento, "quantita", None) is not None:
-                    return max(elemento.quantita * 6, 18)
+                    return max(elemento.quantita * 12, 40)
                 else:
-                    return 18
+                    return 40
 
             elementi_da_cercare = analisi.elementi_richiesti if analisi.elementi_richiesti else []
             if not elementi_da_cercare:
@@ -880,7 +880,7 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
                     filtro_sottocategoria=filtro_sotto,
                     tipo_locale=stato.get("tipo_locale"),
                     filtro_dieta=stato.get("filtro_dieta"),
-                    canale_locale=stato.get("canale_locale"),
+                    canale_locale=stato.get("canale_locale"), intento=analisi.tipo_richiesta,
                 )
 
                 # --- ACTIVE RAG FALLBACK ---
@@ -896,7 +896,7 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
                         filtro_sottocategoria=None,  # Allentato: il filtro esatto ha già fallito, cerchiamo nel dominio ampio
                         tipo_locale=stato.get("tipo_locale"),
                         filtro_dieta=stato.get("filtro_dieta"),
-                        canale_locale=stato.get("canale_locale"),
+                        canale_locale=stato.get("canale_locale"), intento=analisi.tipo_richiesta,
                     )
                     
                     # Evita duplicati tra parziali e fallback
