@@ -1,4 +1,12 @@
-SYSTEM_PROMPT_NINO = r"""
+from core.config_manager import get_azienda_info
+
+def get_system_prompt() -> str:
+    azienda = get_azienda_info()
+    nome = azienda.get("nome", "So Food")
+    settore = azienda.get("settore", "Distribuzione Gastronomica B2B")
+    tono = azienda.get("tono_di_voce", "")
+
+    prompt_grezzo = r"""
 Sei Nino, consulente virtuale B2B di So Food (Bari). Rifornisci la ristorazione in Puglia e Basilicata con consegne dirette con mezzi refrigerati per merce secca, fresca e surgelata. Nel resto d'Italia le spedizioni avvengono TASSATIVAMENTE ed ESCLUSIVAMENTE per prodotti a temperatura ambiente / secco.
 
 OBIETTIVO E STILE
@@ -148,3 +156,14 @@ GESTIONE SCENARI SPECIFICI
 - Allergeni: riporta le informazioni della scheda prodotto e ricorda sempre di far leggere l'etichetta fisica al momento della consegna.
 - Chiusura ordine: non essere insistente. Chiedi Ragione Sociale e Partita IVA solo quando il cliente esprime chiaramente la volontà di aggiungere prodotti alla bozza d'ordine ("aggiungi", "prendo questo", "procediamo con l'ordine"). Ricorda che l'ordine finale verrà sempre rivisto e approvato da un operatore umano.
 """
+
+    
+    # Sostituzioni dinamiche
+    prompt_dinamico = prompt_grezzo.replace("So Food", nome)
+    prompt_dinamico = prompt_dinamico.replace("Sei Nino, l'assistente virtuale commerciale B2B per la ristorazione.", f"Sei Nino, l'assistente virtuale commerciale B2B di {nome} ({settore}).\n{tono}")
+    return prompt_dinamico
+    
+    # Sostituzioni dinamiche
+    prompt_dinamico = prompt_grezzo.replace("So Food", nome)
+    prompt_dinamico = prompt_dinamico.replace("Sei Nino, l'assistente virtuale commerciale B2B per la ristorazione.", f"Sei Nino, l'assistente virtuale commerciale B2B di {nome} ({settore}).\n{tono}")
+    return prompt_dinamico

@@ -1,0 +1,95 @@
+# ==============================================================================
+# CONFIGURAZIONE CLIENTE (WHITE-LABEL) - VERSIONE ESTESA E VERIFICATA
+# ==============================================================================
+
+azienda:
+  nome: "So Food"
+  settore: "Distribuzione Gastronomica B2B"
+  tono_di_voce: "Professionale, propositivo, rivolto a chef e ristoratori. Agisci come un consulente culinario."
+  contatti:
+    email: "ordini@sofood.it"
+    telefono: "080 1234567"
+
+catalogo:
+  # Reparti esclusi a priori dal motore di composizione piatti/taglieri
+  reparti_esclusi_da_piatti:
+    - "AZIENDALE"
+    - "LOGISTICA"
+  
+  # Categorie documentali (da non usare come ingredienti)
+  categorie_documentali:
+    - "Scheda fornitore"
+    - "Orari e zone di consegna"
+    - "informativa"
+    - "documento"
+
+regole_composizione:
+  tagliere:
+    quantita_default_salumi: 3
+    quantita_default_formaggi: 3
+    
+    # Reparti e sottocategorie che ROVINANO un tagliere B2B
+    reparti_vietati:
+      - "GELO"
+      - "CARNE"  # (Carne cruda da cuocere non va nel tagliere)
+      - "CARNI"
+    
+    sottocategorie_vietate:
+      - "SALUMI QUADRETTATI"
+      - "HAMBURGER"
+      - "MACINATO"
+      - "POLLO"
+      - "SURG DOLCI/PASTICCERIA"
+      - "SURG PESCE NATURALE"
+      - "SURG PIATTI PRONTI"
+      - "SURG SPECIALITA' SALATE"
+      - "SURG VEGETALI NATURALI/FRUTTA"
+      - "SURG VEGETALI PREPARATI"
+      - "GELATI DESSERT"
+      - "GELATI VASCHETTE"
+      - "> 1000 GR"  # Pezzature fuori scala per composizione al volo
+      - "BASI PER PIZZA E IMPASTI"
+      - "FARINE E MISCELE"
+      - "PIZZE E PREPARATI"
+      - "SUGHI PRONTI E BASI"
+      - "SUGHI,SALSE E CONDIMENTI"
+      
+    incompatibilita:
+      terra_mare: true
+      max_macinati: 1
+      max_cotti: 1
+      max_erborinati: 1
+
+regole_dieta:
+  vegano:
+    # Per essere considerato vegano al 100%, il campo vegano deve essere "SI"
+    # "SI*" viene considerato a rischio (possibili tracce o derivati)
+    richiede_flag_assoluto: "SI"
+    esclude_reparti:
+      - "CARNE"
+      - "CARNI"
+      - "SALUMI"
+      - "MARE"
+      - "FORMAGGI"
+    esclude_sottocategorie:
+      - "UOVA"
+      - "MIELE"
+      - "BISCOTTI ALL'UOVO"
+      - "PASTA ALL'UOVO"
+      - "MAIONESE"
+      
+  vegetariano:
+    esclude_reparti:
+      - "CARNE"
+      - "CARNI"
+      - "SALUMI"
+      - "MARE"
+
+regole_territoriali:
+  # Associazioni usate dal motore RAG per il boost geografico
+  puglia: ["pugliese", "barese", "lucano", "salento", "taralli", "capocollo", "martina franca", "burrata"]
+  campania: ["campano", "napoletano", "gragnano", "bufala", "pomodorino", "sorrento", "amalfi"]
+  trentino: ["alpino", "trentino", "speck", "montano", "tirolo"]
+  piemonte: ["piemontese", "langhe", "tartufo", "bra", "fassona"]
+  emilia: ["emiliano", "parma", "modena", "bologna", "mortadella", "crudo"]
+  spagna: ["spagnolo", "iberico", "tapas", "serrano", "pat negra", "cebo"]

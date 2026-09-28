@@ -10,7 +10,7 @@ import chromadb
 from pydantic import BaseModel
 from google import genai
 from google.genai import types
-from core.system_prompt_v2 import SYSTEM_PROMPT_NINO
+from core.system_prompt_v2 import get_system_prompt
 from core.retrieval_utils import (
     costruisci_indice_codici,
     costruisci_indice_fornitori,
@@ -34,7 +34,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
-from core.system_prompt_v2 import SYSTEM_PROMPT_NINO
+from core.system_prompt_v2 import get_system_prompt
 
 class ElementoRichiesto(BaseModel):
     dominio: str = Field(description="Es. 'salumi', 'formaggi', 'sottoli', 'mare', 'vino', 'dispensa'")
@@ -968,30 +968,26 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
             # HARD-FILTER DIETETICO DETERMINISTICO (VEGANO)
             if stato.get("filtro_dieta") == "vegano" or any(v in user_query_clean.lower() for v in ["vegano", "vegana", "vegani", "vegane", "100% vegetale", "plant based"]):
                 stato["filtro_dieta"] = "vegano"
-                FORNITORI_NON_VEG = {
-                    "italfish", "medimer", "delfino", "smeralda", "oberto", "adò", "ado'",
-                    "la bottega di ado'", "branchi", "franchi", "franchi salumi", "martina franca",
-                    "salumi martina franca", "scudellaro", "crucolo", "la casera",
-                    "formaggeria toscana", "montanari & gruzza", "coradazzi", "recco",
-                    "latte nobile", "san salvatore", "azienda agricola san salvatore 1988",
-                    "menodiciotto", "pisani dossi", "pellizziari", "cecinas nieto", "solera"
-                }
-                PAROLE_NON_VEG = [
-                    "carne", "manzo", "maiale", "vitello", "salume", "salumi", "prosciutto", "salame",
-                    "pancetta", "guanciale", "lardo", "culatello", "capocollo", "bresaola", "cecina", "jamon",
-                    "pesce", "tonno", "salmone", "baccalà", "baccala", "spada", "alici", "acciug", "polpo",
-                    "ricci", "riccio", "bottarga", "latte", "formaggio", "formaggi", "burro", "mozzarella",
-                    "burrata", "stracciatella", "pecorino", "parmigiano", "grana", "ricotta", "uov", "miele", "strutto"
-                ]
+                from core.config_manager import get_regole_dieta
+                regole_veg = get_regole_dieta("vegano")
+                rep_vietati = [r.upper() for r in regole_veg.get("esclude_reparti", [])]
+                sottocat_vietate = [s.upper() for s in regole_veg.get("esclude_sottocategorie", [])]
+                flag_assoluto = regole_veg.get("richiede_flag_assoluto", "SI")
+                
                 filtrati_veg = []
                 for r in record_prodotti:
-                    forn_r = str(r["metadata"].get("nome_fornitore", "")).lower()
-                    rep_r = str(r["metadata"].get("reparto", "")).upper()
-                    if any(fv in forn_r for fv in FORNITORI_NON_VEG) or rep_r in ["CARNE", "SALUMI", "FORMAGGI", "MARE"]:
+                    meta = r.get("metadata", {})
+                    rep_r = str(meta.get("reparto", "")).upper()
+                    sc_r = str(meta.get("sottocategoria", "")).upper()
+                    flag_v = str(meta.get("vegano", "")).strip().upper()
+                    
+                    if rep_r in rep_vietati:
                         continue
-                    doc_r = r.get("document", "").lower()
-                    if any(pv in doc_r for pv in PAROLE_NON_VEG):
+                    if sc_r in sottocat_vietate:
                         continue
+                    if flag_v and flag_v != flag_assoluto:
+                        continue
+                        
                     filtrati_veg.append(r)
                 record_prodotti = filtrati_veg
 
