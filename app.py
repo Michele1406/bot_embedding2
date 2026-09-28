@@ -75,12 +75,11 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("ATTENZIONE: GEMINI_API_KEY non trovata nel file .env")
 
-MODELLO_EMBEDDING = "models/gemini-embedding-2"
-MODELLO_PRINCIPALE = os.getenv("MODELLO_RISPOSTA", "models/gemini-3.6-flash")
-MODELLO_GEMINI = "models/gemini-3.6-flash"
-MODELLO_FALLBACK = "models/gemini-3.6-flash"
-MODELLO_AUDIO = "models/gemini-2.5-flash"
-MODELLO_AUDIO_FALLBACK = "models/gemini-3.6-flash"
+import os
+MODELLO_EMBEDDING = os.getenv("LLM_EMBEDDING", "models/gemini-embedding-2")
+MODELLO_PRINCIPALE = os.getenv("LLM_PRINCIPALE", "models/gemini-3.6-flash")
+MODELLO_FALLBACK = os.getenv("LLM_FALLBACK", "models/gemini-3.6-flash")
+MODELLO_AUDIO = os.getenv("LLM_AUDIO", "models/gemini-2.5-flash")
 PERCORSO_DATABASE_VETTORIALE = "./database_vettoriale"
 NOME_COLLEZIONE = "catalogo_sofood"
 N_RISULTATI_RAG = 65  # Aumentato per passare più prodotti all'IA e permettere taglieri grandi
@@ -143,7 +142,7 @@ def trascrivi_audio(audio_bytes: bytes, mime_type: str = "audio/webm") -> str:
         temperature=0.0
     )
 
-    for modello in [MODELLO_AUDIO, MODELLO_AUDIO_FALLBACK]:
+    for modello in [MODELLO_AUDIO, MODELLO_FALLBACK]:
         try:
             res = client_genai.models.generate_content(
                 model=modello,
@@ -620,7 +619,9 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
         print(f"[CHECKOUT] Rilevata chiusura ordine per sessione {session_id}")
         
         # Inizializza il carrello (assumiamo tenant 'so_food' di default per il webhook test)
-        app_cart.init_cart(session_id, "so_food")
+        from core.config_manager import get_azienda_info
+        tenant_name = get_azienda_info().get("nome", "azienda_ignota")
+        app_cart.init_cart(session_id, tenant_name)
         
         # Estrai l'ordine dalla cronologia
         ordine_estratto = estrai_ordine_da_chat(client_genai, stato["storico"], MODELLO_FALLBACK)

@@ -38,7 +38,15 @@ Se un prodotto e' stato solo proposto dall'assistente ma non confermato dal clie
                 response_schema=CheckoutOrdine,
             )
         )
-        return CheckoutOrdine.model_validate_json(risposta.text)
+        testo_json = risposta.text.strip()
+        if testo_json.startswith('`json'):
+            testo_json = testo_json[7:]
+        if testo_json.startswith('`'):
+            testo_json = testo_json[3:]
+        if testo_json.endswith('`'):
+            testo_json = testo_json[:-3]
+        testo_json = testo_json.strip()
+        return CheckoutOrdine.model_validate_json(testo_json)
     except Exception as e:
         print(f"Errore in estrazione ordine: {e}")
         return CheckoutOrdine(ragione_sociale=None, partita_iva=None, prodotti=[])
