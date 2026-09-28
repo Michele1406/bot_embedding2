@@ -1,4 +1,6 @@
 import os
+from core.cart_manager import app_cart
+from core.order_extractor import estrai_ordine_da_chat
 import re
 import json
 import time
@@ -51,7 +53,7 @@ class ProfiloClienteAggiornato(BaseModel):
     citta: str | None = None
 
 class AnalisiUnificata(BaseModel):
-    tipo_richiesta: str = Field(description="'panoramica_catalogo', 'ricerca_specifica', 'composizione_piatto', 'conversazione_generica'")
+    tipo_richiesta: str = Field(description="'panoramica_catalogo', 'ricerca_specifica', 'composizione_piatto', 'conversazione_generica', 'chiusura_ordine'")
     richiede_composizione: bool = Field(description="True se chiede taglieri, menu, abbinamenti, tris")
     riferimento_precedente: bool = Field(description="True se dice 'dimmene altri', 'ancora', 'altri' riferiti a qualcosa di prima")
     argomento_riferito: str | None = Field(None, description="Es. 'salumi' se il riferimento precedente era ai salumi")
@@ -271,6 +273,11 @@ REGOLE PER L'ESTRAZIONE DEGLI ELEMENTI (ElementoRichiesto):
    Esempio: "3 formaggi di cui 1 erborinato" → Elemento(dominio="formaggi", quantita=1, sottocategoria="erborinato") + Elemento(dominio="formaggi", quantita=2, sottocategoria=None)
    Esempio: "2 prosciutti di cui 1 parma" → Elemento(dominio="salumi", quantita=1, sottocategoria="PARMA") + Elemento(dominio="salumi", quantita=1, sottocategoria=None)
    MAI accorpare attributi forzati con quantità miste in un solo elemento.
+
+
+REGOLE PER IL TIPO DI RICHIESTA (tipo_richiesta):
+- Imposta 'chiusura_ordine' SE E SOLO SE l'utente conferma ESPLICITAMENTE che vuole procedere all'ordine, ad esempio fornendo la Partita IVA, dicendo "ok procediamo con l'ordine", "confermo questi", "aggiungi tutto al carrello ed emetti fattura".
+- Altrimenti usa 'panoramica_catalogo', 'ricerca_specifica', 'composizione_piatto' o 'conversazione_generica' a seconda del contesto.
 
 REGOLE PER IL RIFERIMENTO PRECEDENTE:
 - Se il cliente dice "dimmene altri", "ancora", o "altri" senza specificare cosa, devi capire dallo STORICO a cosa si riferisce e impostare `riferimento_precedente`=true e `argomento_riferito` al dominio di cui parlavate.
@@ -607,6 +614,28 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
 
     # ANALISI SEMANTICA UNIFICATA (Intent, Profile, RAG Elements)
     analisi = analizza_richiesta_unificata(client_genai, user_query_clean, contesto_conversazione, stato)
+
+    # GESTIONE CHECKOUT / CHIUSURA ORDINE
+    if analisi.tipo_richiesta == "chiusura_ordine":
+        print(f"[CHECKOUT] Rilevata chiusura ordine per sessione {session_id}")
+        
+        # Inizializza il carrello (assumiamo tenant 'so_food' di default per il webhook test)
+        app_cart.init_cart(session_id, "so_food")
+        
+        # Estrai l'ordine dalla cronologia
+        ordine_estratto = estrai_ordine_da_chat(client_genai, stato["storico"], MODELLO_FALLBACK)
+        
+        if ordine_estratto.prodotti:
+            dati_cliente = {}
+            if ordine_estratto.ragione_sociale: dati_cliente["ragione_sociale"] = ordine_estratto.ragione_sociale
+            if ordine_estratto.partita_iva: dati_cliente["partita_iva"] = ordine_estratto.partita_iva
+            
+            app_cart.update_cart(session_id, [p.model_dump() for p in ordine_estratto.prodotti], dati_cliente)
+            successo, payload = app_cart.inoltra_ordine_erp(session_id)
+            
+            if successo:
+                stato["storico"].append({"role": "model", "parts": ["Ordine inviato al gestionale. Preparo la conferma per il cliente."]})
+
 
     # Continuità conversazionale: se l'utente chiede "dimmene altri", recuperiamo l'argomento precedente
     if analisi.riferimento_precedente and analisi.argomento_riferito:
