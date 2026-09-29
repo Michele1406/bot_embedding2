@@ -1384,7 +1384,7 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
             
         def get_comp_piano(ruolo_target: str) -> dict:
             comps = get_comps_piano(ruolo_target)
-            return comps[0] if comps else {} if comps else [{}] # Fallback ad un componente vuoto
+            return comps[0] if comps else {}
 
         # 1. Salumi
         comps_salumi = get_comps_piano("salumi")
