@@ -609,7 +609,10 @@ def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
                 payload = json.loads(sse_msg[6:].strip())
                 if "chunk" in payload:
                     testo_completo += payload["chunk"]
-            except:
+                elif "error" in payload:
+                    testo_completo += "\n\n[ERRORE DI SISTEMA]: " + payload["error"]
+            except Exception as e:
+                print("Errore JSON parse in elabora_messaggio_nino:", e)
                 pass
     return {"reply": testo_completo}
 
