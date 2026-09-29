@@ -1373,6 +1373,7 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
         is_spagnolo = regione == "spagna"
         is_mare = any(w in query_utente.lower() for w in ["mare", "pesce", "ittic", "polpo", "tonno", "salmone"]) or (id_ricetta == "TAGLIERE_MARE_ITALFISH")
 
+        tema_regione = TEMI_REGIONALI.get(regione) or TEMI_REGIONALI["generico"]
         def get_comps_piano(ruolo_target: str) -> list:
             comps = []
             if not piano_ricerca or "componenti" not in piano_ricerca:
@@ -1431,7 +1432,6 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
                 tf = int(comp_formaggi.get("quantita_target"))
                 
             vuole_formaggi_esplicito = any(w in query_utente.lower() for w in ["formagg", "cacio", "pecorin"]) or bool(comp_formaggi)
-            tema_regione = TEMI_REGIONALI.get(regione) or TEMI_REGIONALI["generico"]
             formaggi_di_default = tema_regione.get("formaggi_di_default", True) and not is_mare
             abilita_formaggi = tf > 0 and (formaggi_di_default or vuole_formaggi_esplicito)
     
