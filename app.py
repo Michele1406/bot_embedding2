@@ -73,8 +73,8 @@ if not GEMINI_API_KEY:
 
 import os
 MODELLO_EMBEDDING = os.getenv("LLM_EMBEDDING", "models/gemini-embedding-2")
-MODELLO_PRINCIPALE = os.getenv("LLM_PRINCIPALE", "models/gemini-3.6-flash")
-MODELLO_FALLBACK = os.getenv("LLM_FALLBACK", "models/gemini-3.6-flash")
+MODELLO_PRINCIPALE = os.getenv("LLM_PRINCIPALE", "models/gemini-3.5-flash")
+MODELLO_FALLBACK = os.getenv("LLM_FALLBACK", "models/gemini-3.5-flash")
 MODELLO_AUDIO = os.getenv("LLM_AUDIO", "models/gemini-2.5-flash")
 PERCORSO_DATABASE_VETTORIALE = "./database_vettoriale"
 NOME_COLLEZIONE = "catalogo_sofood"
