@@ -38,13 +38,16 @@ import json
 def parse_db_json_field(val, default=None):
     if default is None:
         default = []
-    if not val or str(val).lower() == 'nan':
+    if val is None or str(val).lower() in ('nan', 'none', 'null'):
         return default
-    if isinstance(val, list) or isinstance(val, dict):
-        return val
+    if isinstance(val, (list, dict)):
+        return val if val else (val if type(val) == type(default) else default)
+    if not str(val).strip():
+        return default
     try:
         import json
-        return json.loads(val)
+        parsed = json.loads(val)
+        return parsed if parsed is not None else default
     except Exception:
         return [x.strip() for x in str(val).split(',') if x.strip()]
 
@@ -690,7 +693,7 @@ def cerca_prodotti(collezione, indice_codici, embedder, user_query: str, n_risul
     conteggio_fornitori_vett = {}
     
     for r in vettoriali:
-        f = str(r["metadata"].get("nome_fornitore", "")).strip().lower()
+        f = str((r["metadata"].get("nome_fornitore") or "")).strip().lower()
         if f and conteggio_fornitori_vett.get(f, 0) >= 5:
             vettoriali_overflow.append(r)
         else:
@@ -726,7 +729,7 @@ def cerca_prodotti(collezione, indice_codici, embedder, user_query: str, n_risul
     combinati = filtrati_base
 
     # 2. Filtro Tagliere (Solo se l'intento lo richiede)
-    if intento == "tagliere_o_ricetta":
+    if intento in ("tagliere_o_ricetta", "composizione_piatto"):
         regole_tagliere = get_regole_tagliere()
         rep_vietati = [r.upper() for r in regole_tagliere.get("reparti_vietati", [])]
         sc_vietate = [s.upper() for s in regole_tagliere.get("sottocategorie_vietate", [])]
@@ -751,13 +754,13 @@ def cerca_prodotti(collezione, indice_codici, embedder, user_query: str, n_risul
         for r in combinati:
             rep = str(r["metadata"].get("reparto", "")).upper()
             sc = str(r["metadata"].get("sottocategoria", "")).upper()
-            flag_v = str(r["metadata"].get("vegano" if filtro_dieta.lower() == "vegano" else "vegetariano", "")).strip().upper()
+            flag_v = str(r["metadata"].get("vegano" if filtro_dieta.lower() == "vegano" else ("vegetariano" if filtro_dieta.lower() == "vegetariano" else "senza_glutine"), "")).strip().upper()
             
             if rep in rep_vietati_dieta:
                 continue
             if sc in sc_vietate_dieta:
                 continue
-            if flag_assoluto and flag_v and flag_v != flag_assoluto:
+            if flag_assoluto and str(flag_v) != str(flag_assoluto):
                 continue
                 
             filtrati_dieta.append(r)
@@ -789,7 +792,7 @@ def cerca_prodotti(collezione, indice_codici, embedder, user_query: str, n_risul
     # richiedere di elencare a mano i nomi dei fornitori "speciali". Così se
     # domani entra o esce un fornitore di birra dal catalogo, il comportamento
     # si aggiorna da solo, senza toccare il codice.
-    fornitori_distinti = {r["metadata"].get("nome_fornitore", "") for r in combinati}
+    fornitori_distinti = {(r["metadata"].get("nome_fornitore") or "") for r in combinati}
     if 0 < len(fornitori_distinti) <= 2:
         cap_categoria_di_nicchia = min(max(n_risultati, MAX_PRODOTTI_PER_FORNITORE), 12)
     else:
@@ -798,7 +801,7 @@ def cerca_prodotti(collezione, indice_codici, embedder, user_query: str, n_risul
     conteggio_fornitori = {}
     risultati_diversificati = []
     for r in combinati:
-        fornitore = r["metadata"].get("nome_fornitore", "")
+        fornitore = (r["metadata"].get("nome_fornitore") or "")
         conteggio_fornitori[fornitore] = conteggio_fornitori.get(fornitore, 0) + 1
 
         max_forn = cap_categoria_di_nicchia
@@ -887,7 +890,7 @@ def costruisci_contesto_testuale(record_prodotti: list, id_gia_mostrati: "set | 
             idx_totale += 1
             meta = r["metadata"]
             prima_linea = r['document'].splitlines()[0] if r.get('document') else ""
-            nome_pulito = pulisci_nome_commerciale(prima_linea, meta.get('nome_fornitore', ''))
+            nome_pulito = pulisci_nome_commerciale(prima_linea, (meta.get('nome_fornitore') or ''))
             tag_match = "[MATCH ESATTO SU CODICE PRODOTTO] " if r.get("match_esatto") else ""
             tag_gia_visto = " [GIÀ MENZIONATO IN PRECEDENZA]" if r["id"] in id_gia_mostrati else ""
     
@@ -914,7 +917,7 @@ def costruisci_contesto_testuale(record_prodotti: list, id_gia_mostrati: "set | 
     # Aggiungo la lista riassuntiva dei fornitori disponibili
     fornitori_presenti = set()
     for r in record_ordinati:
-        f = str(r["metadata"].get("nome_fornitore", "")).strip().title()
+        f = str((r["metadata"].get("nome_fornitore") or "")).strip().title()
         if f and f.lower() not in ("sconosciuto", "nan", "none", "azienda agricola", "null"):
             fornitori_presenti.add(f)
             
@@ -1268,7 +1271,7 @@ def _seleziona_componente_tagliere(ruolo: str, regione: str, collezione_prodotti
     filtrati = []
     for r in candidati:
         doc_p = r["document"].splitlines()[0].lower() if r.get("document") else ""
-        forn_p = str(r["metadata"].get("nome_fornitore", "")).lower()
+        forn_p = str((r["metadata"].get("nome_fornitore") or "")).lower()
         if esclusioni and any(w in doc_p for w in esclusioni) and not any(
             exp in permetti_parole_esplicite for exp in ("spalmabil", "crostin", "crema", "mozzarella", "burrata", "treccia", "stracciatella", "ricotta", "bufala")
         ):
@@ -1302,7 +1305,7 @@ def _seleziona_componente_tagliere(ruolo: str, regione: str, collezione_prodotti
     selezionati = []
 
     for r in filtrati:
-        f = r["metadata"].get("nome_fornitore", "").lower()
+        f = (r["metadata"].get("nome_fornitore") or "").lower()
         sc = str(r["metadata"].get("sottocategoria", "")).lower()
 
         # Chiave di diversità: FAMIGLIA gastronomica (INCOMPATIBILITY_MATRIX di
@@ -1643,7 +1646,7 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
             visti_fornitori = set()
             selezionati = []
             for r in risultati:
-                forn = r["metadata"].get("nome_fornitore", "").lower()
+                forn = (r["metadata"].get("nome_fornitore") or "").lower()
                 if forn not in visti_fornitori:
                     visti_fornitori.add(forn)
                     selezionati.append(r)
@@ -1824,7 +1827,7 @@ def gestisci_slot_mancante(slot: dict, collezione_prodotti, embedder,
                 slot["sostituto_id"] = candidati["ids"][0][candidato_valido]
                 meta_sostituto = candidati["metadatas"][0][candidato_valido]
                 prima_linea = candidati["documents"][0][candidato_valido].splitlines()[0] if candidati["documents"][0][candidato_valido] else ""
-                slot["sostituto_nome"] = pulisci_nome_commerciale(prima_linea, meta_sostituto.get("nome_fornitore", ""))
+                slot["sostituto_nome"] = pulisci_nome_commerciale(prima_linea, (meta_sostituto.get("nome_fornitore") or ""))
             else:
                 slot["esito"] = "OMESSO"
         else:
@@ -1832,7 +1835,7 @@ def gestisci_slot_mancante(slot: dict, collezione_prodotti, embedder,
             slot["sostituto_id"] = candidati["ids"][0][0]
             meta_sostituto = candidati["metadatas"][0][0]
             prima_linea = candidati["documents"][0][0].splitlines()[0] if candidati["documents"][0][0] else ""
-            slot["sostituto_nome"] = pulisci_nome_commerciale(prima_linea, meta_sostituto.get("nome_fornitore", ""))
+            slot["sostituto_nome"] = pulisci_nome_commerciale(prima_linea, (meta_sostituto.get("nome_fornitore") or ""))
     else:
         slot["esito"] = "OMESSO"
     return slot
