@@ -188,7 +188,16 @@ indice_testuale = costruisci_indice_testuale(collezione)
 sessioni = {}  # sid -> {"storico": [...], "prodotti_mostrati": set(), "prodotti_mostrati_ordinati": [], ...}
 
 
+import datetime
+
+def pulisci_sessioni_scadute():
+    ora = datetime.datetime.now()
+    scadute = [s for s, d in sessioni.items() if (ora - d.get("last_active", ora)).total_seconds() > 86400]
+    for s in scadute:
+        del sessioni[s]
+
 def ottieni_sessione():
+    pulisci_sessioni_scadute()
     if "sid" not in session:
         session["sid"] = str(uuid.uuid4())
     sid = session["sid"]
@@ -208,6 +217,7 @@ def ottieni_sessione():
         }
     sessioni[sid].setdefault("ultimo_piatto_proposto", None)
     sessioni[sid].setdefault("ricette_mostrate", set())
+    sessioni[sid]["last_active"] = datetime.datetime.now()
     return sessioni[sid], sid
 
 
