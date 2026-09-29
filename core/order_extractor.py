@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import json
 from pydantic import BaseModel, Field
 from google.genai import types
 
@@ -25,7 +24,15 @@ Estrai in modo preciso:
 
 Se un prodotto e' stato solo proposto dall'assistente ma non confermato dal cliente, NON INCLUDERLO.
 '''
-    chat_text = "\n".join([f"{m['role'].upper()}: {m.get('parts', [''])[0]}" for m in storico_messaggi])
+    chat_text = ""
+    for m in storico_messaggi:
+        ruolo = getattr(m, "role", "unknown").upper()
+        testo = ""
+        if hasattr(m, "parts") and m.parts:
+            part = m.parts[0]
+            testo = getattr(part, "text", "") or ""
+        chat_text += f"{ruolo}: {testo}\n"
+        
     full_prompt = prompt + "\n\nCRONOLOGIA CHAT:\n" + chat_text[-4000:] 
     
     try:
@@ -38,12 +45,12 @@ Se un prodotto e' stato solo proposto dall'assistente ma non confermato dal clie
                 response_schema=CheckoutOrdine,
             )
         )
-        testo_json = risposta.text.strip()
-        if testo_json.startswith('`json'):
+        testo_json = (risposta.text or "").strip()
+        if testo_json.startswith("```json"):
             testo_json = testo_json[7:]
-        if testo_json.startswith('`'):
+        elif testo_json.startswith("```"):
             testo_json = testo_json[3:]
-        if testo_json.endswith('`'):
+        if testo_json.endswith("```"):
             testo_json = testo_json[:-3]
         testo_json = testo_json.strip()
         return CheckoutOrdine.model_validate_json(testo_json)
