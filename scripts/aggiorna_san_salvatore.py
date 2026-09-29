@@ -38,7 +38,7 @@ if not GEMINI_API_KEY:
 MODELLO_EMBEDDING = "models/gemini-embedding-2"
 PERCORSO_DB = CARTELLA_BASE / "database_vettoriale"
 NOME_COLLEZIONE = "catalogo_sofood"
-CARTELLA_SAN_SALVATORE = Path(r"C:\Users\baron\LAVORO\PRODOTTI SOFOOD\19010926")
+CARTELLA_SAN_SALVATORE = Path(os.getenv("DATA_LAKE_PATH", os.getenv("DATA_LAKE_PATH", r"C:\Users\baron\LAVORO\PRODOTTI SOFOOD")) + "\\19010926")
 NOME_FORNITORE = "San Salvatore | Azienda Agricola San Salvatore 1988"
 CODICE_FORNITORE = "19010926"
 

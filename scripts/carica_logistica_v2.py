@@ -25,8 +25,8 @@ if not GEMINI_API_KEY:
 MODELLO_EMBEDDING = "models/gemini-embedding-2"
 
 # Percorsi assoluti verso la cartella sofood
-FILE_CALENDARIO = r"C:\Users\baron\LAVORO\PRODOTTI SOFOOD\sofood\calendario_freschi.xlsx"
-FILE_CONSEGNE = r"C:\Users\baron\LAVORO\PRODOTTI SOFOOD\sofood\consegne.xlsx"
+FILE_CALENDARIO = os.getenv("DATA_LAKE_PATH", os.getenv("DATA_LAKE_PATH", r"C:\Users\baron\LAVORO\PRODOTTI SOFOOD")) + "\\sofood\\calendario_freschi.xlsx"
+FILE_CONSEGNE = os.getenv("DATA_LAKE_PATH", os.getenv("DATA_LAKE_PATH", r"C:\Users\baron\LAVORO\PRODOTTI SOFOOD")) + "\\sofood\\consegne.xlsx"
 PERCORSO_DB = "./database_vettoriale"
 NOME_COLLEZIONE = "catalogo_sofood"
 

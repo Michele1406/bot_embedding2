@@ -51,7 +51,7 @@ MODELLO_EMBEDDING = "models/gemini-embedding-2"
 MODELLO_CLASSIFICAZIONE = "models/gemini-3.5-flash-lite"
 PERCORSO_DB = "./database_vettoriale"
 NOME_COLLEZIONE = "catalogo_sofood"
-CARTELLA_PRODOTTI = Path(r"C:\Users\baron\LAVORO\PRODOTTI SOFOOD")
+CARTELLA_PRODOTTI = Path(os.getenv("DATA_LAKE_PATH", r"C:\Users\baron\LAVORO\PRODOTTI SOFOOD"))
 FILE_PROGRESSO = Path("progresso_tassonomia.json")
 
 # Modello Pydantic per la classificazione batch

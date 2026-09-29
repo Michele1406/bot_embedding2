@@ -25,7 +25,7 @@ if not GEMINI_API_KEY:
 MODELLO_EMBEDDING = "models/gemini-embedding-2"
 
 # Percorso assoluto aggiornato
-FILE_EXCEL_ABSTRACT = r"C:\Users\baron\LAVORO\PRODOTTI SOFOOD\sofood\ABSTRACT.xlsx"
+FILE_EXCEL_ABSTRACT = os.getenv("DATA_LAKE_PATH", os.getenv("DATA_LAKE_PATH", r"C:\Users\baron\LAVORO\PRODOTTI SOFOOD")) + "\\sofood\\ABSTRACT.xlsx"
 NOME_FOGLIO = "Abstract Database"
 PERCORSO_DB = "./database_vettoriale"
 NOME_COLLEZIONE = "catalogo_sofood"
