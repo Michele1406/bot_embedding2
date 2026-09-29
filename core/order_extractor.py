@@ -24,15 +24,31 @@ Estrai in modo preciso:
 
 Se un prodotto e' stato solo proposto dall'assistente ma non confermato dal cliente, NON INCLUDERLO.
 '''
-    chat_text = ""
+    righe_chat = []
     for m in storico_messaggi:
-        ruolo = getattr(m, "role", "unknown").upper()
-        testo = ""
-        if hasattr(m, "parts") and m.parts:
-            part = m.parts[0]
-            testo = getattr(part, "text", "") or ""
-        chat_text += f"{ruolo}: {testo}\n"
+        # Supporto polimorfico: sia tipi types.Content che dizionari
+        if isinstance(m, dict):
+            raw_role = m.get("role") or "unknown"
+            raw_parts = m.get("parts") or []
+        else:
+            raw_role = getattr(m, "role", None) or "unknown"
+            raw_parts = getattr(m, "parts", None) or []
+
+        ruolo = str(raw_role).upper()
         
+        # Estrai testo gestendo oggetti Part, stringhe e messaggi multi-part
+        frammenti = []
+        for p in raw_parts:
+            if isinstance(p, str):
+                frammenti.append(p)
+            elif hasattr(p, "text") and p.text:
+                frammenti.append(str(p.text))
+        
+        testo = " ".join(frammenti).strip()
+        if testo:
+            righe_chat.append(f"{ruolo}: {testo}")
+
+    chat_text = "\n".join(righe_chat)
     full_prompt = prompt + "\n\nCRONOLOGIA CHAT:\n" + chat_text[-4000:] 
     
     try:
@@ -46,13 +62,12 @@ Se un prodotto e' stato solo proposto dall'assistente ma non confermato dal clie
             )
         )
         testo_json = (risposta.text or "").strip()
-        if testo_json.startswith("```json"):
-            testo_json = testo_json[7:]
-        elif testo_json.startswith("```"):
-            testo_json = testo_json[3:]
-        if testo_json.endswith("```"):
-            testo_json = testo_json[:-3]
-        testo_json = testo_json.strip()
+        # Estrai il blocco JSON puro anche in presenza di markdown o caratteri spuri
+        start_idx = testo_json.find("{")
+        end_idx = testo_json.rfind("}")
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            testo_json = testo_json[start_idx:end_idx + 1]
+            
         return CheckoutOrdine.model_validate_json(testo_json)
     except Exception as e:
         print(f"Errore in estrazione ordine: {e}")
