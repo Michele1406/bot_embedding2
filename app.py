@@ -33,10 +33,6 @@ from core.tassonomia_sofood import classifica_terra_mare
 from core.domain_rules import check_board_violations
 from dotenv import load_dotenv
 
-from pydantic import BaseModel, Field
-from google import genai
-from google.genai import types
-from core.system_prompt_v2 import build_modular_prompt
 
 class ElementoRichiesto(BaseModel):
     dominio: str = Field(description="Es. 'salumi', 'formaggi', 'sottoli', 'mare', 'vino', 'dispensa'")
@@ -631,12 +627,12 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
 
     # GESTIONE CHECKOUT / CHIUSURA ORDINE
     if analisi.tipo_richiesta == "chiusura_ordine":
-        print(f"[CHECKOUT] Rilevata chiusura ordine per sessione {session_id}")
+        print(f"[CHECKOUT] Rilevata chiusura ordine per sessione {sid}")
         
         # Inizializza il carrello (assumiamo tenant 'so_food' di default per il webhook test)
         from core.config_manager import get_azienda_info
         tenant_name = get_azienda_info().get("nome", "azienda_ignota")
-        app_cart.init_cart(session_id, tenant_name)
+        app_cart.init_cart(sid, tenant_name)
         
         # Estrai l'ordine dalla cronologia
         ordine_estratto = estrai_ordine_da_chat(client_genai, stato["storico"], MODELLO_FALLBACK)
@@ -646,18 +642,22 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
             if ordine_estratto.ragione_sociale: dati_cliente["ragione_sociale"] = ordine_estratto.ragione_sociale
             if ordine_estratto.partita_iva: dati_cliente["partita_iva"] = ordine_estratto.partita_iva
             
-            app_cart.update_cart(session_id, [p.model_dump() for p in ordine_estratto.prodotti], dati_cliente)
-            successo, payload = app_cart.inoltra_ordine_erp(session_id)
+            app_cart.update_cart(sid, [p.model_dump() for p in ordine_estratto.prodotti], dati_cliente)
+            successo, payload = app_cart.inoltra_ordine_erp(sid)
             
             if successo:
-                stato["storico"].append({"role": "model", "parts": ["Ordine inviato al gestionale. Preparo la conferma per il cliente."]})
+                stato["storico"].append(types.Content(role="model", parts=[types.Part.from_text(text="Ordine inviato al gestionale. Preparo la conferma per il cliente.")]))
+                yield 'data: {"chunk": "\n\nOrdine inoltrato con successo al gestionale! Hai bisogno di altro?"}\n\n'
+                yield 'data: {"done": true}\n\n'
+                return
+
 
 
     # Continuità conversazionale: se l'utente chiede "dimmene altri", recuperiamo l'argomento precedente
     if analisi.riferimento_precedente and analisi.argomento_riferito:
         ha_nuovi = any(e.dominio.lower() != "generale" for e in analisi.elementi_richiesti)
         if not ha_nuovi:
-            from app import ElementoRichiesto
+            
             analisi.elementi_richiesti = [ElementoRichiesto(
                 dominio=analisi.argomento_riferito,
                 quantita=None,
@@ -907,7 +907,7 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
 
             elementi_da_cercare = analisi.elementi_richiesti if analisi.elementi_richiesti else []
             if not elementi_da_cercare:
-                from app import ElementoRichiesto
+                
                 elementi_da_cercare = [ElementoRichiesto(dominio="generale", query_ricerca=testo_per_ricerca)]
 
             for elem in elementi_da_cercare:
@@ -1038,7 +1038,7 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
                 record_prodotti = filtrati_veg
 
         except Exception as e:
-            return {"reply": f"Errore nella ricerca prodotti: {e}"}
+            yield f'data: {{"error": "Errore nella ricerca: {e}"}}\n\n'; return
 
         prodotti_mostrati_per_contesto = stato["prodotti_mostrati"].copy()
         if is_warm_request:
@@ -1155,10 +1155,9 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
                     if tentat < 2:
                         time.sleep(3 * (tentat + 1))
                         continue
-                return {"reply": f"Errore del modello: {e}"}
+                yield f'data: {{"error": "Errore del modello: {e}"}}\n\n'; return
     
-        testo_pulito = response.text or ""
-        testo_pulito = re.sub(r'\b[Ss]ottofondo\b', 'sottovuoto', testo_pulito)
+                testo_pulito = re.sub(r'\b[Ss]ottofondo\b', 'sottovuoto', testo_pulito)
         testo_pulito = re.sub(r'PRODOTTI\s+SOFOUND', 'PRODOTTI SOFOOD', testo_pulito, flags=re.IGNORECASE)
         testo_pulito = re.sub(r'^\s*#{1,6}\s*(.+)$', r'**\1**', testo_pulito, flags=re.MULTILINE)
         testo_pulito = re.sub(r'(\s*[\*\-]\s*)\*{3,}', r'\1**', testo_pulito)
@@ -1207,6 +1206,8 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
                                 inserito = True
                     if inserito:
                         testo_pulito = "\n".join(nuove_righe)
+                        import json
+                        yield f'data: {json.dumps({"chunk": "\n\n" + nuove_righe[-1]})}\n\n'
             testo_pulito = re.sub(r'(\[IMG:\s*[^\]]+\])(?:\s*\1)+', r'\1', testo_pulito)
         else:
             # Strip any [IMG] tags that the LLM might have generated on its own
@@ -1217,22 +1218,6 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
         testo_pulito = re.sub(r' \n', '\n', testo_pulito)
         testo_pulito = re.sub(r'\n ,', ',', testo_pulito)
         
-        # --- REFLECTION LOOP (Auto-Correzione Multi-Dominio) ---
-        domini_mancanti = []
-        risposta_lower = testo_pulito.lower()
-        if getattr(analisi, "elementi_richiesti", None):
-            for elem in analisi.elementi_richiesti:
-                if elem.dominio.lower() != "generale" and elem.dominio.lower() not in risposta_lower:
-                    domini_mancanti.append(elem.dominio)
-
-        if domini_mancanti and tentativo_riflessione == 0:
-            prompt_riflessione = f"L'utente aveva richiesto esplicitamente di parlare anche di: {', '.join(domini_mancanti)}.\nLa tua risposta copre queste categorie o le ha dimenticate?\nRispondi solo 'MANCA' se le hai dimenticate, altrimenti 'OK'.\n\nRISPOSTA:\n{testo_pulito}"
-            res_rif = client_genai.models.generate_content(model=MODELLO_FALLBACK, contents=prompt_riflessione)
-            if "MANCA" in (res_rif.text or "").upper():
-                print(f"[REFLECTION] Domini mancanti: {domini_mancanti}. Rigenero.")
-                prompt_finale += f"\n\nATTENZIONE: Nella risposta precedente ti sei scordato di trattare queste categorie richieste dall'utente: {', '.join(domini_mancanti)}. Riprova bilanciando la risposta in modo che copra TUTTE le richieste in egual misura, senza bloccarti su una sola categoria."
-                continue
-                
         break
 
     stato["storico"].append(types.Content(role="user", parts=[types.Part.from_text(text=user_query)]))
