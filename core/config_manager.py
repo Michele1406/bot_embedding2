@@ -17,7 +17,7 @@ class ConfigManager:
         """Ricarica il file YAML (utile se viene modificato senza riavviare il server)"""
         try:
             with open(CONFIG_FILE_PATH, "r", encoding="utf-8") as f:
-                self._config = yaml.safe_load(f)
+                self._config = yaml.safe_load(f) or {}
         except Exception as e:
             print(f"[ERRORE] Impossibile leggere {CONFIG_FILE_PATH}: {e}")
             self._config = {}

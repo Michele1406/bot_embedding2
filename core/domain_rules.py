@@ -112,7 +112,7 @@ def check_board_violations(board_products: list, allow_terra_mare: bool = False)
             # Se almeno un tag del prodotto è tra i members della regola (match esatto
             # sui campi di categoria, o il nome del membro compare come parola nel nome
             # prodotto reale)
-            if any(tag in members or any(m in tag for m in members if m) for tag in tags):
+            if any(tag in members or any(m == tag or f" {m} " in f" {tag} " or f" {m}," in f" {tag}," for m in members if m) for tag in tags):
                 sc_counts[rule_name] = sc_counts.get(rule_name, 0) + 1
                 sc_examples.setdefault(rule_name, []).append(nome_prodotto or prod.get("id", "?"))
 
@@ -143,7 +143,7 @@ def prodotto_appartiene_a_famiglia(prodotto: dict, rule_name: str) -> bool:
     delle due, cambia anche l'altra."""
     if rule_name not in INCOMPATIBILITY_MATRIX or rule_name == "TERRA_MARE_MIX":
         return False
-    meta = prodotto.get("metadata", {})
+    meta = prodotto.get("metadata") or {}
     sc = normalize_string(meta.get("sottocategoria", ""))
     cat = normalize_string(meta.get("categoria_prodotto", ""))
     rep = normalize_string(meta.get("reparto", ""))
@@ -151,4 +151,4 @@ def prodotto_appartiene_a_famiglia(prodotto: dict, rule_name: str) -> bool:
     nome_prodotto = normalize_string(documento.splitlines()[0] if documento else "")
     tags = [sc, cat, rep, nome_prodotto]
     members = [normalize_string(m) for m in INCOMPATIBILITY_MATRIX[rule_name].get("members", [])]
-    return any(tag in members or any(m in tag for m in members if m) for tag in tags)
+    return any(tag in members or any(m == tag or f" {m} " in f" {tag} " or f" {m}," in f" {tag}," for m in members if m) for tag in tags)

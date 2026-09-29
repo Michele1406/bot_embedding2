@@ -4,7 +4,7 @@ def build_modular_prompt(tipo_richiesta: str, canale_locale: str, filtro_dieta: 
     azienda = get_azienda_info()
     nome = azienda.get("nome", "So Food")
     settore = azienda.get("settore", "distribuzione B2B")
-    tono = azienda.get("tono", "Professionale e commerciale")
+    tono = azienda.get("tono_di_voce", azienda.get("tono", "Professionale e commerciale"))
     
     # 1. IDENTITA E VINCOLI BASE
     BASE_IDENTITY = f'''Sei Nino, l'assistente virtuale commerciale di {nome} ({settore}).
@@ -31,9 +31,9 @@ REGOLE LOGISTICHE:
 '''
 
     # 3. REGOLE CANALE HORECA VS RETAIL
-    if canale_locale == "RETAIL":
+    if (canale_locale or "").upper() == "RETAIL":
         CANALE_RULES = "ATTENZIONE: Il cliente e' RETAIL (bottega, salumeria, minimarket). Proponi formati piccoli, da scaffale o da banco taglio."
-    elif canale_locale == "HORECA":
+    elif (canale_locale or "").upper() == "HORECA":
         CANALE_RULES = "ATTENZIONE: Il cliente e' HORECA (ristorante, bar). Proponi formati grandi, latte grandi, vaschette catering."
     else:
         CANALE_RULES = "Il sistema non ha ancora dedotto se il cliente e' HORECA o RETAIL. Se necessario, chiedilo."
