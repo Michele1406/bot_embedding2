@@ -722,7 +722,7 @@ def cerca_prodotti(collezione, indice_codici, embedder, user_query: str, n_risul
     filtrati_base = []
     for r in combinati:
         rep = str(r["metadata"].get("reparto", "")).upper()
-        cat = str(r["metadata"].get("categoria", "")).upper()
+        cat = str(r["metadata"].get("categoria_prodotto", "")).upper()
         if is_reparto_escluso_da_rag(rep) or is_categoria_documentale(cat):
             continue
         filtrati_base.append(r)
@@ -1389,6 +1389,8 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
 
         # 1. Salumi
         comps_salumi = get_comps_piano("salumi")
+        if not comps_salumi:
+            comps_salumi = [{"ruolo": "salumi", "quantita_target": target_salumi, "query_pulita": query_utente}]
         for idx_comp, comp_salumi in enumerate(comps_salumi):
             ts = target_salumi if idx_comp == 0 else 0
             if comp_salumi.get("quantita_target") is not None:
@@ -1426,6 +1428,8 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
 
         # 2. Formaggi
         comps_formaggi = get_comps_piano("formaggi")
+        if not comps_formaggi:
+            comps_formaggi = [{"ruolo": "formaggi", "quantita_target": target_formaggi, "query_pulita": query_utente}]
         for idx_comp, comp_formaggi in enumerate(comps_formaggi):
             tf = target_formaggi if idx_comp == 0 else 0
             if comp_formaggi.get("quantita_target") is not None:
@@ -1584,8 +1588,13 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
                 fornitori_in_query.append(f_k)
 
     slot_riempiti = []
-    for ingr in template["ingredienti"]:
-        nome_ingr = ingr["INGREDIENTE_GENERICO"]
+    ingredienti_template = template.get("ingredienti") or template.get("slot", [])
+    if isinstance(ingredienti_template, str):
+        ingredienti_template = parse_db_json_field(ingredienti_template, [])
+    for ingr in ingredienti_template:
+        if isinstance(ingr, str):
+            ingr = {"INGREDIENTE_GENERICO": ingr, "CATEGORIA_ATTESA": "", "RUOLO": "opzionale", "NOTE_INGREDIENTE": ""}
+        nome_ingr = ingr.get("INGREDIENTE_GENERICO") or ingr.get("ingrediente_generico", str(ingr))
         categoria_attesa = str(ingr.get("CATEGORIA_ATTESA", "")).lower()
         ruolo = str(ingr.get("RUOLO", "opzionale")).lower()
         note = str(ingr.get("NOTE_INGREDIENTE") or "")

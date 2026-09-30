@@ -23,14 +23,11 @@ from core.retrieval_utils import (
     cerca_prodotti,
     costruisci_contesto_testuale,
     componi_proposta_da_ricettario,
-    estrai_conteggi_tagliere,
     pulisci_nome_commerciale,
     rileva_cluster_regionale,
 )
 from core.fornitori_config import FORNITORI, elenco_fornitori_per_ruolo_regione
 from core.profilazione_locale import rileva_canale_locale
-from core.tassonomia_sofood import classifica_terra_mare
-from core.domain_rules import check_board_violations
 from dotenv import load_dotenv
 
 
@@ -63,6 +60,25 @@ app = Flask(__name__)
 # Necessaria per firmare i cookie di sessione (identifica il singolo cliente).
 # Mettila anche lei in .env in produzione, es. FLASK_SECRET_KEY=...
 app.secret_key = os.getenv("FLASK_SECRET_KEY", os.urandom(24))
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5 MB max per request
+
+# Rate limiter leggero in-memory (nessuna dipendenza esterna)
+_rate_limit_store = {}  # IP -> [timestamps]
+RATE_LIMIT_MAX = 20  # max richieste
+RATE_LIMIT_WINDOW = 60  # secondi
+
+@app.before_request
+def _rate_limit_check():
+    if request.endpoint in ('chat', 'chat_stream', 'chat_audio'):
+        ip = request.remote_addr or "unknown"
+        now = time.time()
+        timestamps = _rate_limit_store.get(ip, [])
+        timestamps = [t for t in timestamps if now - t < RATE_LIMIT_WINDOW]
+        if len(timestamps) >= RATE_LIMIT_MAX:
+            from flask import abort
+            abort(429)
+        timestamps.append(now)
+        _rate_limit_store[ip] = timestamps
 
 # ====================================================================
 # CONFIGURAZIONE GLOBALE
@@ -71,7 +87,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("ATTENZIONE: GEMINI_API_KEY non trovata nel file .env")
 
-import os
+
 MODELLO_EMBEDDING = os.getenv("LLM_EMBEDDING", "models/gemini-embedding-2")
 MODELLO_PRINCIPALE = os.getenv("LLM_PRINCIPALE", "models/gemini-3.5-flash")
 MODELLO_FALLBACK = os.getenv("LLM_FALLBACK", "models/gemini-3.5-flash")
@@ -1170,7 +1186,7 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
                         continue
                 yield f'data: {{"error": "Errore del modello: {e}"}}\n\n'; return
     
-                testo_pulito = re.sub(r'\b[Ss]ottofondo\b', 'sottovuoto', testo_pulito)
+        testo_pulito = re.sub(r'\b[Ss]ottofondo\b', 'sottovuoto', testo_pulito)
         testo_pulito = re.sub(r'PRODOTTI\s+SOFOUND', 'PRODOTTI SOFOOD', testo_pulito, flags=re.IGNORECASE)
         testo_pulito = re.sub(r'^\s*#{1,6}\s*(.+)$', r'**\1**', testo_pulito, flags=re.MULTILINE)
         testo_pulito = re.sub(r'(\s*[\*\-]\s*)\*{3,}', r'\1**', testo_pulito)
@@ -2201,10 +2217,18 @@ HTML_TEMPLATE = r"""
             }
         }
 
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
         function aggiungiMessaggio(testo, classe, opzioniAudio = null) {
             let chatbox = document.getElementById("chatbox");
             let orario = getOrario();
             let ticks = (classe === "tu") ? `<span class="ticks">✓✓</span>` : "";
+            // Escape il testo per prevenire XSS injection
+            let testoSicuro = (classe === "tu") ? escapeHtml(testo) : testo;
 
             let contenutoHtml = "";
             if (opzioniAudio) {
@@ -2221,8 +2245,8 @@ HTML_TEMPLATE = r"""
                     </div>`;
             }
 
-            if (testo) {
-                let tf = testo;
+            if (testoSicuro) {
+                let tf = testoSicuro;
                 // 1. Titoli markdown (###, ##, #) -> wa-heading
                 tf = tf.replace(/^###\s*(.*?)$/gm, '<div class="wa-heading">$1</div>');
                 tf = tf.replace(/^##\s*(.*?)$/gm, '<div class="wa-heading">$1</div>');
