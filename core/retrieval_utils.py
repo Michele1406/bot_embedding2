@@ -462,7 +462,7 @@ def componi_proposta_da_ricettario(richiesta_cliente: str, tipo_locale: "str | N
     docs/struttura_rag_ricettario.md per i dettagli implementativi e il
     funzionamento del ciclo di selezione e arricchimento)."""
     
-    prodotti_esclusi = set(prodotti_gia_proposti) if prodotti_gia_proposti else set()
+    prodotti_esclusi = set(prodotti_esclusi or []) | set(prodotti_gia_proposti or [])
     
     # Se il piano ricerca definisce quantità forzate globali per i taglieri, usale
     if piano_ricerca and piano_ricerca.get("intento") == "tagliere_o_ricetta":
@@ -1423,6 +1423,7 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
                         "categoria_attesa": "Salumi" if not is_mare else "Mare",
                         "ruolo": "protagonista",
                         "note_ingrediente": "affettati o da morsa",
+                        "esito": "TROVATO",
                         "prodotto_trovato": prod,
                     })
 
@@ -1454,6 +1455,7 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
                         "categoria_attesa": "Formaggi",
                         "ruolo": "protagonista",
                         "note_ingrediente": "pasta dura o semidura da tavola",
+                        "esito": "TROVATO",
                         "prodotto_trovato": prod,
                     })
 
@@ -1474,6 +1476,7 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
                     "categoria_attesa": "Mare",
                     "ruolo": "secondario",
                     "note_ingrediente": "stile spagnolo",
+                    "esito": "TROVATO",
                     "prodotto_trovato": sel_tapas[0],
                 })
         elif is_mare:
@@ -1494,6 +1497,7 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
                     "categoria_attesa": "Mare",
                     "ruolo": "protagonista",
                     "note_ingrediente": "in ciotolina da degustazione con filo d'olio a crudo",
+                    "esito": "TROVATO",
                     "prodotto_trovato": sel_tartare[0],
                 })
 
@@ -1513,6 +1517,7 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
                 "categoria_attesa": "Dispensa",
                 "ruolo": "secondario",
                 "note_ingrediente": "pane, taralli o grissini di accompagnamento",
+                "esito": "TROVATO",
                 "prodotto_trovato": sel_pane[0],
             })
 
@@ -1539,6 +1544,7 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
                     "categoria_attesa": "Dispensa",
                     "ruolo": "secondario",
                     "note_ingrediente": "olive verdi o nere, da servire in ciotolina",
+                    "esito": "TROVATO",
                     "prodotto_trovato": sel_olive[0],
                 })
 
@@ -1569,6 +1575,7 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
                         "categoria_attesa": "Dispensa",
                         "ruolo": "secondario",
                         "note_ingrediente": ruolo_extra.replace("_", " "),
+                        "esito": "TROVATO",
                         "prodotto_trovato": sel_extra[0],
                     })
                     trovato = True
@@ -1668,6 +1675,7 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
                     "categoria_attesa": ingr.get("CATEGORIA_ATTESA", ""),
                     "ruolo": ruolo,
                     "note_ingrediente": note,
+                    "esito": "TROVATO",
                     "prodotto_trovato": prod,
                 })
             if not selezionati:
@@ -1676,6 +1684,7 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
                     "categoria_attesa": ingr.get("CATEGORIA_ATTESA", ""),
                     "ruolo": ruolo,
                     "note_ingrediente": note,
+                    "esito": "NON_TROVATO",
                     "prodotto_trovato": None,
                 })
         else:
@@ -1727,6 +1736,7 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
                 "categoria_attesa": ingr.get("CATEGORIA_ATTESA", ""),
                 "ruolo": ruolo,
                 "note_ingrediente": note,
+                "esito": "NON_TROVATO",
                 "prodotto_trovato": candidati[0] if candidati else None,
             })
 
@@ -1768,6 +1778,7 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
                         "categoria_attesa": res_extra[0]["metadata"].get("categoria_prodotto", "Dispensa"),
                         "ruolo": "secondario",
                         "note_ingrediente": "arricchimento richiesto dal cliente da integrare nella preparazione",
+                        "esito": "TROVATO",
                         "prodotto_trovato": res_extra[0],
                     })
 
@@ -1787,6 +1798,7 @@ def riempi_slot_ricetta(template: dict, collezione_prodotti, indice_codici: dict
                     "categoria_attesa": "Dispensa",
                     "ruolo": "protagonista",
                     "note_ingrediente": "Buns artigianali Farino per burger",
+                    "esito": "TROVATO",
                     "prodotto_trovato": buns_match[0],
                 })
 

@@ -370,7 +370,7 @@ Rispondi rigorosamente con il JSON dello schema AnalisiUnificata.
                         q_spec = int(m_dicui.group(1))
                         spec_text = m_dicui.group(2).strip()
                         elementi_fb.append(ElementoRichiesto(dominio=dominio, query_ricerca=f"{dominio} {spec_text}", quantita=q_spec, sottocategoria=spec_text.upper()))
-                        if q_base > q_spec:
+                        if q_base is not None and q_base > q_spec:
                             elementi_fb.append(ElementoRichiesto(dominio=dominio, query_ricerca=base_query, quantita=q_base - q_spec))
                         m_dicui_tutti.remove(m_dicui)
                         assegnato = True
@@ -1383,6 +1383,14 @@ def servi_immagine():
     if not percorso.lower().endswith(estensioni_valide):
         return "Accesso negato: il file richiesto non è un'immagine valida.", 403
         
+    # Sicurezza: assicura che il percorso sia all'interno del DATA_LAKE_PATH
+    data_lake_path = os.getenv("DATA_LAKE_PATH")
+    if data_lake_path:
+        base_dir = os.path.abspath(data_lake_path)
+        req_dir = os.path.abspath(percorso)
+        if not req_dir.startswith(base_dir):
+            return "Accesso negato: percorso non consentito.", 403
+
     if os.path.exists(percorso):
         return send_file(percorso)
     return "Immagine non trovata o percorso non valido", 404
