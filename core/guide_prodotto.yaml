@@ -1,0 +1,773 @@
+# Guida tecnica ai prodotti (carne, legumi e cereali, riso, farine, pomodoro, uova, formaggi da cucina).
+# Conoscenza culinaria GENERALE e prudente, scritta una volta qui (mai nel prompt): entra nel contesto solo per i
+# prodotti realmente a catalogo (core/guide_prodotto.py). Dati della scheda (linea Oberto, tempi di cottura) hanno la
+# precedenza e si leggono dal testo del prodotto. Porzioni = indicazioni di massima per un secondo/primo, non regole.
+#
+# Campi:  quando: selettore (come abbinamenti_horeca.yaml: parole/sottocategorie/reparti/escludi)
+#         e_anche: [[parole], [parole]]  ogni gruppo deve comparire (AND di OR)
+#         modifica: true = nota che si aggiunge alla guida base (es. "gia' cotti")
+#         usi: chiavi d'uso (vedi sezione usi) per "che taglio per la griglia?"
+#         simili: id di guide con cui il prodotto e' intercambiabile (sostituzione tra tagli)
+# L'ordine conta: vince la prima guida base che combacia (prima le piu' specifiche).
+
+usi:
+  griglia: ["griglia", "grigliat", "brace", "barbecue", "bbq", "piastra", "fry-top"]
+  tagliata: ["tagliata", "tagliate"]
+  padella: ["padella", "scaloppin", "bistecc"]
+  forno: ["arrosto", "arrost", "al forno", "roast beef"]
+  brasato: ["brasat", "stracott", "cottura lunga", "cottura lenta", "in umido"]
+  bollito: ["bollit", "lesso", "lessat", "lessare"]
+  ragu: ["ragu", "ragù", "sugo di carne"]
+  crudo: ["tartare", "carne cruda", "battuta", "crudo", "carpaccio"]
+  hamburger: ["hamburger", "burger", "panino", "panini"]
+  spezzatino: ["spezzatino"]
+  zuppa: ["zuppa", "zuppe", "minestra", "minestrone", "vellutata"]
+  insalata: ["insalata", "insalate", "insalatona"]
+  risotto: ["risotto", "risotti"]
+  pizza: ["pizza", "pinsa"]
+  pane: ["pane", "panificazione", "focaccia"]
+  pasta_fresca: ["pasta fresca", "pasta all'uovo", "tagliatelle fatte", "sfoglia"]
+  dolci: ["dolci", "pasticceria", "torta", "torte", "lievitati"]
+  sugo: ["sugo", "sughi", "salsa di pomodoro", "pummarola"]
+  polenta: ["polenta"]
+  pesce: ["pesce", "crostacei", "frutti di mare"]
+  frittura: ["frittur", "friggere", "fritto", "fritti"]
+  antipasto: ["antipast", "crostin", "aperitiv", "tartine"]
+  primo: ["primo", "primi", "spaghetti", "linguine", "condire la pasta", "per la pasta"]
+  finitura: ["finitura", "a crudo", "a gocce", "decorare", "guarnire"]
+
+# ---------------------------------------------------------------- CARNE
+guide:
+  - id: tomahawk
+    famiglia: carne
+    nome: Tomahawk
+    quando: {parole: ["tomahawk"]}
+    carattere: "costata alta con l'osso lungo lasciato intero: scenografica, si porta a tavola intera e si affetta"
+    cotture: ["griglia o brace", "scottatura e finitura in forno"]
+    piatti: ["tomahawk alla griglia", "tagliata di tomahawk"]
+    porzione: "circa 500 g a persona (con osso); un pezzo da 1 kg per due"
+    usi: [griglia, forno]
+    simili: [fiorentina, cowboy, costata]
+  - id: fiorentina
+    famiglia: carne
+    nome: Fiorentina
+    quando: {parole: ["fiorentina"]}
+    carattere: "taglio alto con l'osso a T (lombata e filetto), da cuocere al sangue"
+    cotture: ["griglia o brace"]
+    piatti: ["bistecca alla fiorentina"]
+    porzione: "circa 500 g a persona (con osso); 1 kg per due"
+    usi: [griglia]
+    simili: [tomahawk, cowboy, costata]
+  - id: cowboy
+    famiglia: carne
+    nome: Cowboy steak
+    quando: {parole: ["cowboy"]}
+    carattere: "costata alta con osso corto: carne succosa e marezzata, di grande effetto nel piatto"
+    cotture: ["griglia o brace", "padella e forno"]
+    piatti: ["cowboy steak alla griglia"]
+    porzione: "circa 400-500 g a persona (con osso)"
+    usi: [griglia, forno]
+    simili: [tomahawk, fiorentina, costata]
+  - id: costata
+    famiglia: carne
+    nome: Costata
+    quando: {parole: ["costata"], escludi: ["tomahawk", "fiorentina", "cowboy"]}
+    carattere: "taglio con l'osso dalla lombata: sapore pieno, buona marezzatura"
+    cotture: ["griglia", "piastra", "padella e finitura in forno"]
+    piatti: ["costata alla griglia", "costata con sale grosso e rosmarino"]
+    porzione: "circa 350-500 g a persona (con osso)"
+    usi: [griglia, padella]
+    simili: [fiorentina, tomahawk, rib_eye]
+  - id: rib_eye
+    famiglia: carne
+    nome: Rib eye / cube roll
+    quando: {parole: ["rib eye", "ribeye", "cube roll"]}
+    carattere: "parte alta della lombata senza osso: tenera e marezzata (il cube roll e' il pezzo intero da porzionare)"
+    cotture: ["griglia", "piastra", "padella", "forno (pezzo intero)"]
+    piatti: ["rib eye alla piastra", "tagliata di rib eye", "arrosto di cube roll"]
+    porzione: "circa 200-250 g a persona"
+    usi: [griglia, padella, forno, tagliata]
+    simili: [controfiletto, costata]
+  - id: filetto
+    famiglia: carne
+    nome: Filetto
+    quando: {parole: ["filetto con cordone", "filetto c/c", "sottofiletto"]}
+    carattere: "il taglio piu' tenero e magro, poco grasso: cotture rapide e condimenti delicati"
+    cotture: ["padella", "griglia", "forno (pezzo intero)"]
+    piatti: ["filetto al pepe verde", "tournedos", "filetto in crosta", "carpaccio"]
+    porzione: "circa 150-200 g a persona"
+    usi: [padella, griglia, crudo]
+    simili: [controfiletto, rib_eye]
+  - id: controfiletto
+    famiglia: carne
+    nome: Controfiletto
+    quando: {parole: ["controfiletto"]}
+    carattere: "parte magra e saporita della lombata, senza osso"
+    cotture: ["griglia", "piastra", "padella", "forno (pezzo intero)"]
+    piatti: ["tagliata", "roast beef", "bistecche"]
+    porzione: "circa 180-220 g a persona"
+    usi: [griglia, padella, tagliata, forno]
+    simili: [rib_eye, filetto]
+  - id: lombata
+    famiglia: carne
+    nome: Lombata intera
+    quando: {parole: ["lombata"]}
+    carattere: "pezzo intero con osso (e filetto) da sezionare in costate, fiorentine e bistecche"
+    cotture: ["si porziona e si cuoce alla griglia o in padella"]
+    piatti: ["costate", "fiorentine", "bistecche"]
+    porzione: "dipende dal taglio che si ricava (350-500 g a persona con osso)"
+    usi: [griglia]
+    simili: [costata, fiorentina]
+  - id: tagliata
+    famiglia: carne
+    nome: Tagliata
+    quando: {parole: ["tagliata"]}
+    carattere: "fette di coscia pronte per cottura rapida: si cuoce, si lascia riposare e si affetta"
+    cotture: ["griglia", "piastra", "padella"]
+    piatti: ["tagliata con rucola e grana", "tagliata al rosmarino"]
+    porzione: "circa 180-220 g a persona"
+    usi: [tagliata, griglia, padella]
+    simili: [magri_coscia, controfiletto]
+  - id: carpaccio
+    famiglia: carne
+    nome: Carpaccio
+    quando: {parole: ["carpaccio"], escludi: ["marinato", "affumicato"]}
+    carattere: "pezzo magro di coscia da affettare finissimo e servire crudo"
+    cotture: ["nessuna: si serve crudo, condito al momento"]
+    piatti: ["carpaccio con rucola e grana", "carpaccio con olio, limone e sale"]
+    porzione: "circa 80-100 g a persona"
+    usi: [crudo]
+    simili: [da_battere]
+  - id: da_battere
+    famiglia: carne
+    nome: Carne da battere / tartare
+    quando: {parole: ["da battere", "battere", "gran cruda", "tartare", "tartara", "crudo d'alba", "cruda di anteriore"]}
+    carattere: "carne da servire cruda, battuta al coltello e condita al momento (olio, sale, limone)"
+    cotture: ["nessuna: si serve cruda"]
+    piatti: ["battuta al coltello", "tartare"]
+    porzione: "circa 120-150 g a persona"
+    usi: [crudo]
+    simili: [carpaccio]
+  - id: roast_beef_cotto
+    famiglia: carne
+    nome: Cotti da affettare
+    quando: {parole: ["roast beef cotto", "girello cotto", "vitel"]}
+    carattere: "gia' cotto: si affetta sottile e si serve freddo"
+    cotture: ["nessuna: pronto da affettare"]
+    piatti: ["roast beef freddo", "vitello tonnato"]
+    porzione: "circa 100-150 g a persona"
+    usi: [forno, insalata]
+  - id: roast_beef
+    famiglia: carne
+    nome: Fesone per roast beef
+    quando: {parole: ["roast beef", "fesone"]}
+    carattere: "pezzo magro da cuocere intero e affettare sottile"
+    cotture: ["forno (pezzo intero, rosato al centro)"]
+    piatti: ["roast beef", "roast beef con salse"]
+    porzione: "circa 150-200 g a persona"
+    usi: [forno]
+    simili: [magri_coscia]
+  - id: picanha
+    famiglia: carne
+    nome: Picanha
+    quando: {parole: ["picanha"]}
+    carattere: "taglio con copertura di grasso che lo mantiene succoso: si cuoce intero e si affetta"
+    cotture: ["griglia o brace", "forno"]
+    piatti: ["picanha alla brace", "spiedo di picanha"]
+    porzione: "circa 200-250 g a persona"
+    usi: [griglia, forno]
+    simili: [magri_coscia]
+  - id: fibra_lunga
+    famiglia: carne
+    nome: Bavetta, tasca e diaframma
+    quando: {parole: ["bavetta", "tasca per griglia", "diaframma"]}
+    carattere: "tagli a fibra lunga e sapore intenso: cottura rapida e si affettano contro fibra"
+    cotture: ["griglia", "padella molto calda"]
+    piatti: ["tagliata di bavetta", "straccetti"]
+    porzione: "circa 180-220 g a persona"
+    usi: [griglia, padella, tagliata]
+    simili: [tagliata]
+  - id: griglia_anteriore
+    famiglia: carne
+    nome: Tagli da griglia dell'anteriore
+    quando: {parole: ["flatiron", "shoulder", "chuck steak", "sottopaletta"]}
+    carattere: "dalla spalla: sapore deciso, buon rapporto qualita'-prezzo per la griglia"
+    cotture: ["griglia", "piastra", "padella"]
+    piatti: ["bistecca alla griglia", "tagliata"]
+    porzione: "circa 200-250 g a persona"
+    usi: [griglia, padella, tagliata]
+    simili: [costata, tagliata]
+  - id: ossobuco
+    famiglia: carne
+    nome: Stinco
+    quando: {parole: ["stinco", "ossobuco"]}
+    carattere: "taglio con osso e midollo, ricco di tessuto connettivo: richiede cottura lunga"
+    cotture: ["in umido", "brasato", "lessato"]
+    piatti: ["ossobuco", "stinco brasato"]
+    porzione: "circa 300-400 g a persona (con osso)"
+    usi: [brasato, bollito]
+    simili: [brasato_lungo]
+  - id: brasato_lungo
+    famiglia: carne
+    nome: Tagli da cottura lunga
+    quando: {parole: ["guancia", "guanciale di", "coda", "muscolo", "reale", "chuck", "noce di spalla", "spezzatino"], escludi: ["trita", "hamburger"]}
+    carattere: "tagli saporiti e ricchi di tessuto connettivo: con cottura lenta diventano morbidi"
+    cotture: ["brasato", "stracotto", "in umido", "ragu' di carne"]
+    piatti: ["brasato", "guancia al vino rosso", "spezzatino", "ragu'"]
+    porzione: "circa 200-250 g a persona (senza osso)"
+    usi: [brasato, spezzatino, ragu, bollito]
+    simili: [bollito]
+  - id: bollito
+    famiglia: carne
+    nome: Tagli da bollito
+    quando: {parole: ["lesso", "biancostato", "brutto e buono", "punta", "pancia", "lingua", "testa", "ribs"], escludi: ["suino", "maiale"]}
+    carattere: "tagli adatti alla cottura lenta in acqua o in forno basso: il brodo e la carne rendono insieme"
+    cotture: ["lessato", "brasato", "forno a bassa temperatura"]
+    piatti: ["bollito misto", "lingua in salsa verde", "biancostato brasato"]
+    porzione: "circa 200-250 g a persona (con osso fino a 300)"
+    usi: [bollito, brasato]
+    simili: [brasato_lungo]
+  - id: trippa
+    famiglia: carne
+    nome: Trippa
+    quando: {parole: ["trippa"]}
+    carattere: "frattaglia da cuocere a lungo, tipica della cucina di tradizione"
+    cotture: ["in umido"]
+    piatti: ["trippa in umido"]
+    porzione: "circa 200 g a persona"
+    usi: [brasato]
+  - id: magri_coscia
+    famiglia: carne
+    nome: Tagli magri della coscia
+    quando: {parole: ["noce", "girello", "magatello", "fesa", "sottofesa", "scamone", "spinacino", "codone", "gallinella", "bavetta", "fettine"]}
+    carattere: "tagli magri e teneri: ottimi in fettine, tagliata, arrosto affettato sottile e carpaccio"
+    cotture: ["padella veloce", "piastra", "forno (arrosto)"]
+    piatti: ["scaloppine", "tagliata", "arrosto", "vitello tonnato (girello)", "carpaccio"]
+    porzione: "circa 150-200 g a persona"
+    usi: [padella, tagliata, forno, crudo]
+    simili: [tagliata, controfiletto]
+  - id: bistecca
+    famiglia: carne
+    nome: Bistecca
+    quando: {parole: ["bistecca", "bistecche"]}
+    carattere: "fetta singola con osso, pronta per una cottura rapida"
+    cotture: ["griglia", "piastra", "padella"]
+    piatti: ["bistecca alla griglia", "bistecca al rosmarino"]
+    porzione: "circa 250-350 g a persona (con osso)"
+    usi: [griglia, padella]
+    simili: [costata, magri_coscia]
+  - id: lombetto
+    famiglia: carne
+    nome: Lombetto
+    quando: {parole: ["lombetto"]}
+    carattere: "taglio del posteriore dalla linea tagli speciali per griglia: cottura veloce a fuoco alto"
+    cotture: ["griglia", "fry-top"]
+    piatti: ["tagliata", "bistecche di lombetto"]
+    porzione: "circa 150-200 g a persona"
+    usi: [griglia, padella, tagliata]
+    simili: [controfiletto, tagliata]
+  - id: sfilaccio
+    famiglia: carne
+    nome: Sfilaccio affumicato
+    quando: {parole: ["sfilaccio"]}
+    carattere: "gia' pronto al consumo, affumicato, dal gusto intenso"
+    cotture: ["nessuna: pronto al consumo"]
+    piatti: ["antipasto", "guarnizione per insalate", "tagliere"]
+    usi: [insalata]
+  - id: bockwurst
+    famiglia: carne
+    nome: Bockwurst
+    quando: {parole: ["bockwurst"]}
+    carattere: "salsiccia di carne gia' cotta al vapore, leggermente affumicata, in budello naturale"
+    cotture: ["da scaldare prima di servire"]
+    piatti: ["piatto con contorni", "panino"]
+    usi: [hamburger]
+  - id: macinato
+    famiglia: carne
+    nome: Macinato / trita
+    quando: {parole: ["trita", "trito", "macinat"]}
+    carattere: "carne macinata di coscia: base per ragu', polpette, ripieni e hamburger fatti in casa"
+    cotture: ["padella", "forno", "griglia (come hamburger)"]
+    piatti: ["ragu'", "polpette", "ripieni", "hamburger"]
+    porzione: "circa 80-100 g a persona per il ragu'; 150-180 g per un hamburger"
+    usi: [ragu, hamburger]
+    simili: [hamburger]
+  - id: hamburger
+    famiglia: carne
+    nome: Hamburger
+    quando: {parole: ["hamburger", "hamburgherone", "burger", "polpa imperiale"]}
+    carattere: "gia' formato in monoporzione: pronto per piastra o griglia"
+    cotture: ["piastra", "griglia", "padella"]
+    piatti: ["hamburger nel panino", "hamburger con formaggio e salse"]
+    porzione: "1 pezzo (150-200 g) a persona"
+    usi: [hamburger, griglia]
+    simili: [macinato]
+  - id: salsiccia
+    famiglia: carne
+    nome: Salsiccia e impasti
+    quando: {parole: ["salsiccia", "impasto salsiccia", "polpett"]}
+    carattere: "preparazione di carne cruda: si cuoce prima di servire"
+    cotture: ["griglia", "padella", "ragu'"]
+    piatti: ["salsiccia alla griglia", "ragu' di salsiccia", "polpette"]
+    porzione: "circa 150-200 g a persona"
+    usi: [griglia, ragu]
+  - id: agnello
+    famiglia: carne
+    nome: Agnello
+    quando: {parole: ["agnello"]}
+    carattere: "mezzena da sezionare in cosciotto, spalla e carre' (costolette)"
+    cotture: ["forno (cosciotto e spalla)", "griglia o padella (costolette)"]
+    piatti: ["cosciotto di agnello al forno", "costolette di agnello"]
+    porzione: "circa 250-300 g a persona (con osso)"
+    usi: [forno, griglia]
+  - id: suino_fresco
+    famiglia: carne
+    nome: Pancia di suino
+    quando: {parole: ["pancia"], e_anche: [["suino", "maiale"]]}
+    carattere: "taglio grasso e saporito, adatto a cotture lente"
+    cotture: ["forno a bassa temperatura", "brasato"]
+    piatti: ["pancia al forno", "pancia brasata"]
+    porzione: "circa 150-200 g a persona"
+    usi: [forno, brasato]
+  - id: pollo
+    famiglia: carne
+    nome: Pollo
+    quando: {parole: ["pollo"]}
+    carattere: "intero eviscerato: da arrostire, lessare o sezionare"
+    cotture: ["forno (arrosto)", "lessato", "in umido (a pezzi)"]
+    piatti: ["pollo arrosto", "pollo in umido"]
+    porzione: "circa 300 g a persona (con osso)"
+    usi: [forno, bollito]
+  - id: oca
+    famiglia: carne
+    nome: Speck d'oca
+    quando: {parole: ["speck d'oca", "petto d'oca"]}
+    carattere: "petto d'oca affumicato: da affettare e servire freddo"
+    cotture: ["nessuna: si serve a fette"]
+    piatti: ["antipasto", "insalate", "tagliere"]
+    porzione: "circa 50-80 g a persona come antipasto"
+
+  # ------------------------------------------------------------ UOVA
+  - id: uova
+    famiglia: uova
+    nome: Uova
+    quando: {parole: ["uova"], reparti: [CARNE]}
+    carattere: "uova fresche categoria A, da cucina e pasticceria"
+    cotture: ["al tegamino", "sode", "in camicia", "in impasti e creme"]
+    piatti: ["carbonara", "pasta fresca all'uovo", "creme e dolci", "frittate"]
+    porzione: "1-2 uova a persona; per la pasta fresca circa 1 uovo ogni 100 g di farina"
+    usi: [pasta_fresca, dolci]
+
+  # ------------------------------------------------------------ LEGUMI E CEREALI (modifica: nota che si somma alla base)
+  - id: pronti
+    famiglia: legume
+    modifica: true
+    nome: Gia' cotti
+    quando: {parole: ["cotti", "cotta", "cotte", "al naturale"], sottocategorie: ["VEGETALI SECCHI", "ALTRI LEGUMI/VEGETALI/CEREALI", "FAGIOLI CONSERVATI"], tutte: true}
+    e_anche: [["ceci", "lenticchie", "fagioli", "zuppa", "minestra", "cicerchia", "fave"]]
+    nota: "gia' cotti: niente ammollo ne' cottura, si scolano e si scaldano o si condiscono; fanno risparmiare tempo in cucina"
+  - id: ceci
+    famiglia: legume
+    nome: Ceci
+    quando: {parole: ["ceci"], sottocategorie: ["VEGETALI SECCHI", "ALTRI LEGUMI/VEGETALI/CEREALI", "FAGIOLI CONSERVATI"], tutte: true}
+    carattere: "legume versatile, dal sapore delicato: tiene bene la cottura"
+    ammollo: "si (circa 12 ore); i decorticati no"
+    piatti: ["pasta e ceci", "zuppa di ceci", "hummus", "insalata di ceci", "ceci e gamberi"]
+    porzione: "circa 70-80 g da secchi a persona per un primo o piatto unico; 40-50 g come contorno; resa circa il doppio del peso a secco"
+    usi: [zuppa, insalata]
+  - id: lenticchie
+    famiglia: legume
+    nome: Lenticchie
+    quando: {parole: ["lenticchie"], sottocategorie: ["VEGETALI SECCHI", "ALTRI LEGUMI/VEGETALI/CEREALI"], tutte: true}
+    carattere: "legume a cottura rapida; le rosse decorticate si sfaldano e fanno cremose le zuppe"
+    ammollo: "non necessario"
+    piatti: ["zuppa di lenticchie", "lenticchie in umido", "insalata di lenticchie", "vellutata di lenticchie rosse"]
+    porzione: "circa 70-80 g da secchi a persona per un primo; 40-50 g come contorno"
+    usi: [zuppa, insalata]
+  - id: fagioli
+    famiglia: legume
+    nome: Fagioli
+    quando: {parole: ["fagioli"], sottocategorie: ["VEGETALI SECCHI", "ALTRI LEGUMI/VEGETALI/CEREALI", "FAGIOLI CONSERVATI"], tutte: true}
+    carattere: "cannellini, borlotti e tondini: legumi cremosi che si prestano a zuppe, contorni e insalate"
+    ammollo: "si (circa 12 ore)"
+    piatti: ["pasta e fagioli", "zuppa di fagioli", "fagioli all'uccelletto", "insalata di fagioli"]
+    porzione: "circa 70-80 g da secchi a persona per un primo; 40-50 g come contorno"
+    usi: [zuppa, insalata]
+  - id: fave
+    famiglia: legume
+    nome: Fave e piselli decorticati
+    quando: {parole: ["fave", "piselli"], sottocategorie: ["VEGETALI SECCHI"], tutte: true}
+    carattere: "legumi spezzati o decorticati: si sfaldano in cottura e danno creme e passati"
+    ammollo: "di solito non serve (decorticati)"
+    piatti: ["pure' di fave", "vellutata di piselli", "zuppa"]
+    porzione: "circa 70-80 g da secchi a persona"
+    usi: [zuppa]
+  - id: cicerchia
+    famiglia: legume
+    nome: Cicerchia e roveja
+    quando: {parole: ["cicerchia", "roveja"], sottocategorie: ["VEGETALI SECCHI"], tutte: true}
+    carattere: "legumi antichi del centro Italia, dal gusto rustico"
+    piatti: ["zuppa", "minestra rustica"]
+    porzione: "circa 70-80 g da secchi a persona"
+    usi: [zuppa]
+  - id: zuppe
+    famiglia: legume
+    nome: Zuppe e minestre di legumi e cereali
+    quando: {parole: ["zuppa", "minestra", "minestrone"], sottocategorie: ["VEGETALI SECCHI", "ALTRI LEGUMI/VEGETALI/CEREALI"], tutte: true}
+    carattere: "miscele gia' composte di legumi e cereali: un solo prodotto per una zuppa completa"
+    piatti: ["zuppa di legumi e cereali", "minestra con crostini e olio extravergine"]
+    porzione: "circa 70-80 g da secchi a persona"
+    usi: [zuppa]
+  - id: orzo_farro
+    famiglia: cereale
+    nome: Orzo e farro perlati
+    quando: {parole: ["orzo", "farro"], sottocategorie: ["VEGETALI SECCHI", "ALTRI LEGUMI/VEGETALI/CEREALI", "CEREALI"], tutte: true, escludi: ["farina", "macinato"]}
+    carattere: "cereali perlati: non servono ammollo, cuociono in tempi brevi e restano sodi"
+    ammollo: "non necessario"
+    piatti: ["orzotto", "farro in insalata", "zuppa di orzo e farro"]
+    porzione: "circa 70-80 g a secco a persona"
+    usi: [zuppa, insalata, risotto]
+  - id: quinoa
+    famiglia: cereale
+    nome: Quinoa
+    quando: {parole: ["quinoa"]}
+    carattere: "pseudo-cereale dal gusto neutro, cottura rapida"
+    piatti: ["insalata di quinoa", "contorno", "polpette vegetali"]
+    porzione: "circa 60-70 g a secco a persona"
+    usi: [insalata]
+  - id: fregola
+    famiglia: cereale
+    nome: Fregola sarda
+    quando: {parole: ["fregola", "fregula"]}
+    carattere: "piccole sfere di semola tostate: superficie rugosa che trattiene i condimenti"
+    piatti: ["fregola con i frutti di mare", "fregola in brodo", "fregola in insalata"]
+    porzione: "circa 80 g a secco a persona"
+    usi: [risotto, insalata]
+
+  # ------------------------------------------------------------ RISO
+  - id: riso_carnaroli
+    famiglia: riso
+    nome: Riso Carnaroli
+    quando: {parole: ["carnaroli", "acquerello"], sottocategorie: ["RISO BIANCO"], tutte: true}
+    carattere: "chicco grande che tiene la cottura e mantecata bene: il riso classico del risotto"
+    piatti: ["risotto", "risotto alla milanese", "risotto ai funghi"]
+    porzione: "circa 80-90 g a persona per un risotto"
+    usi: [risotto]
+    simili: [riso_vialone]
+  - id: riso_vialone
+    famiglia: riso
+    nome: Riso Vialone Nano
+    quando: {parole: ["vialone"]}
+    carattere: "chicco medio che assorbe bene i condimenti: risotti 'all'onda' e risi e bisi"
+    piatti: ["risi e bisi", "risotto all'onda"]
+    porzione: "circa 80 g a persona"
+    usi: [risotto, zuppa]
+    simili: [riso_carnaroli]
+  - id: riso_parboiled
+    famiglia: riso
+    nome: Riso parboiled
+    quando: {parole: ["parboil", "paraboil"]}
+    carattere: "non scuoce: adatto a cotture da catering e ad insalate di riso"
+    piatti: ["insalata di riso", "riso in bianco", "riso come contorno"]
+    porzione: "circa 70-80 g a persona"
+    usi: [insalata]
+  - id: riso_integrale
+    famiglia: riso
+    nome: Riso integrale e nero
+    quando: {parole: ["integrale", "nero"], sottocategorie: ["SPECIALITA' RISO"], tutte: true}
+    carattere: "riso a chicco intero: cottura piu' lunga e gusto piu' deciso"
+    piatti: ["insalata di riso", "contorno", "riso con verdure"]
+    porzione: "circa 70-80 g a persona"
+    usi: [insalata]
+  - id: riso_generico
+    famiglia: riso
+    nome: Riso
+    quando: {parole: ["riso"], sottocategorie: ["RISO BIANCO", "RISO PARBOILED", "SPECIALITA' RISO"], tutte: true}
+    carattere: "riso bianco da cucina"
+    piatti: ["risotto", "riso in bianco"]
+    porzione: "circa 70-90 g a persona"
+    usi: [risotto]
+
+  # ------------------------------------------------------------ FARINE
+  - id: farina_00
+    famiglia: farina
+    nome: Farina di grano tenero 00
+    quando: {parole: ["tipo 00", " 00 "], sottocategorie: ["FARINE E MISCELE"], tutte: true}
+    carattere: "farina fine e bianca, versatile"
+    piatti: ["pane", "pizza", "pasta fresca", "dolci"]
+    usi: [pizza, pane, pasta_fresca, dolci]
+    simili: [farina_0]
+  - id: farina_forte
+    famiglia: farina
+    nome: Farina "forte" per grandi lievitati
+    quando: {parole: ["furia", "forza", "manitoba"], sottocategorie: ["FARINE E MISCELE"], tutte: true}
+    carattere: "farina tecnica per impasti a lunga maturazione"
+    piatti: ["pizza a lunga maturazione", "focacce", "grandi lievitati (panettone, pandoro)"]
+    usi: [pizza, pane, dolci]
+  - id: farina_0
+    famiglia: farina
+    nome: Farina di grano tenero 0 e 2
+    quando: {parole: ["tipo 0", "tipo 2", "burattat", "buratto"], sottocategorie: ["FARINE E MISCELE"], tutte: true}
+    carattere: "farina piu' rustica della 00: da pane e pizza, con sapore piu' deciso"
+    piatti: ["pane", "pizza", "focaccia"]
+    usi: [pizza, pane]
+    simili: [farina_00]
+  - id: farina_multicereali
+    famiglia: farina
+    nome: Farina ai 7 cereali
+    quando: {parole: ["sette effe", "7 effe", "7 cereali", "multicereali"], sottocategorie: ["FARINE E MISCELE"], tutte: true}
+    carattere: "miscela di cereali e semi per pane e impasti rustici"
+    piatti: ["pane ai cereali", "pizza rustica"]
+    usi: [pane, pizza]
+  - id: semola
+    famiglia: farina
+    nome: Semola di grano duro
+    quando: {parole: ["semola", "sfarinato"], sottocategorie: ["FARINE E MISCELE"], tutte: true}
+    carattere: "grano duro macinato: giallo e granuloso"
+    piatti: ["pasta fresca (orecchiette, cavatelli)", "pane di semola", "spolvero per pizza e impasti"]
+    usi: [pasta_fresca, pane]
+  - id: farina_mais
+    famiglia: farina
+    nome: Farina di mais
+    quando: {parole: ["mais", "bramata"], sottocategorie: ["FARINE E MISCELE"], tutte: true}
+    carattere: "farina gialla da polenta"
+    piatti: ["polenta", "polenta con formaggi o ragu'"]
+    usi: [polenta]
+  - id: farine_antiche
+    famiglia: farina
+    nome: Farine di cereali alternativi
+    quando: {parole: ["saraceno", "segale", "farro", "enkir", "macina", "riso"], sottocategorie: ["FARINE E MISCELE"], tutte: true}
+    carattere: "farine di grani antichi o alternativi: gusto piu' pieno, spesso da miscelare a una farina di grano tenero"
+    piatti: ["pane rustico", "impasti misti", "pasta fresca"]
+    usi: [pane, pasta_fresca]
+
+  # ------------------------------------------------------------ POMODORO
+  - id: pomodoro_san_marzano
+    famiglia: pomodoro
+    nome: San Marzano
+    quando: {parole: ["san marzano"], sottocategorie: ["PELATI E POMODORINI"], tutte: true}
+    carattere: "pomodoro pelato intero, dolce e poco acido: la scelta classica per pizza napoletana e sughi"
+    piatti: ["pizza napoletana", "sugo al pomodoro", "pasta al pomodoro"]
+    usi: [sugo, pizza]
+  - id: pomodoro_datterino
+    famiglia: pomodoro
+    nome: Datterino e pomodorini
+    quando: {parole: ["datterino", "pizzutello", "corbarin", "piennolo", "pomodorini", "pacchetelle", "fiaschetto"], sottocategorie: ["PELATI E POMODORINI", "POLPA DI POMODORO", "PASSATA DI POMODORO"], tutte: true}
+    carattere: "pomodorini dolci, con poca acqua: sughi freschi a cottura breve, pizza e bruschette"
+    piatti: ["sugo fresco di pomodorini", "pasta al datterino", "pizza", "bruschetta"]
+    usi: [sugo, pizza]
+  - id: pomodoro_pelati
+    famiglia: pomodoro
+    nome: Pomodori pelati
+    quando: {parole: ["pelati", "pelato", "filetti"], sottocategorie: ["PELATI E POMODORINI"], tutte: true}
+    carattere: "pomodori pelati interi o a filetti: base per sughi, ragu' e pizza"
+    piatti: ["sugo al pomodoro", "ragu'", "pizza"]
+    usi: [sugo, pizza]
+  - id: pomodoro_passata
+    famiglia: pomodoro
+    nome: Passata e polpa
+    quando: {sottocategorie: ["PASSATA DI POMODORO", "POLPA DI POMODORO", "DERIVATI DEL POMODORO"]}
+    carattere: "passata liscia per sughi uniformi; polpa con pezzi per sughi rustici e topping di pizza"
+    piatti: ["sugo base", "ragu'", "topping per pizza"]
+    usi: [sugo, pizza]
+
+  # ------------------------------------------------------------ FORMAGGI DA CUCINA
+  - id: formaggio_grattugia
+    famiglia: formaggio
+    nome: Formaggi da grattugia
+    quando: {parole: ["grana", "parmigian"], reparti: [FORMAGGI]}
+    carattere: "stagionati duri: da grattugiare su pasta e risotti, a scaglie su carpacci e insalate"
+    piatti: ["risotto mantecato", "pasta al forno", "scaglie su carpaccio"]
+    usi: [risotto]
+  - id: formaggio_pecorino
+    famiglia: formaggio
+    nome: Pecorino
+    quando: {sottocategorie: ["PECORINO"]}
+    carattere: "formaggio di pecora: stagionato si grattugia (cacio e pepe, carbonara), fresco o semistagionato va a tavola"
+    piatti: ["cacio e pepe", "carbonara", "gricia"]
+  - id: formaggio_pizza
+    famiglia: formaggio
+    nome: Mozzarelle e paste filate da cucina
+    quando: {sottocategorie: ["MOZZARELLE", "PASTE FILATE USO CUCINA"]}
+    carattere: "paste filate che fondono bene: pizza, parmigiane, gratin"
+    piatti: ["pizza", "parmigiana", "panini caldi"]
+    usi: [pizza]
+
+  # ------------------------------------------------------------ MARE (prima i piu' specifici)
+  - id: saku
+    famiglia: mare
+    nome: Saku di pesce
+    quando: {parole: ["saku"], reparti: [MARE]}
+    carattere: "mattonella di pesce rifilata, senza scarti: si affetta in tagli regolari"
+    cotture: ["a crudo (sashimi)", "scottato fuori e crudo dentro (tataki)"]
+    piatti: ["sashimi", "tataki", "crudo di mare"]
+    porzione: "circa 80-100 g a persona come crudo"
+    usi: [crudo, antipasto]
+    simili: [tartare_pesce]
+  - id: tartare_pesce
+    famiglia: mare
+    nome: Tartare e carpaccio di pesce
+    quando: {parole: ["tartare di", "carpaccio di"], reparti: [MARE]}
+    carattere: "tartare e carpaccio di pesce pronti da servire, gia' lavorati"
+    cotture: ["nessuna: si servono cosi', conditi al momento"]
+    piatti: ["tartare con agrumi e olio", "carpaccio con rucola", "crudo di mare"]
+    porzione: "circa 80-100 g a persona come antipasto"
+    usi: [crudo, antipasto]
+    simili: [saku, affumicati]
+  - id: bottarga
+    famiglia: mare
+    nome: Bottarga
+    quando: {parole: ["bottarga"]}
+    carattere: "uova di pesce salate ed essiccate, dal sapore intenso: se ne usa poca"
+    cotture: ["nessuna: grattugiata o a fettine sottili, a crudo"]
+    piatti: ["spaghetti alla bottarga", "crostini con burro e bottarga", "bottarga su insalate e carpacci"]
+    porzione: "pochi grammi a piatto (circa 5-10 g grattugiata su un primo)"
+    usi: [primo, antipasto]
+  - id: caviale
+    famiglia: mare
+    nome: Caviale
+    quando: {parole: ["caviale"]}
+    carattere: "uova di pesce da servire fredde e in purezza"
+    cotture: ["nessuna: si serve freddo"]
+    piatti: ["caviale con blini o crostini", "con burro", "su uova o tartare"]
+    usi: [antipasto]
+  - id: riccio
+    famiglia: mare
+    nome: Polpa di riccio di mare
+    quando: {parole: ["riccio di mare"]}
+    carattere: "polpa gia' pronta, dal sapore di mare intenso"
+    cotture: ["a crudo", "unita al primo a fine cottura, fuori dal fuoco"]
+    piatti: ["spaghetti ai ricci", "crostini con polpa di riccio"]
+    usi: [primo, antipasto, crudo]
+  - id: salumi_mare
+    famiglia: mare
+    nome: Salumi di mare
+    quando: {parole: ["bresaola di", "prosciutto di", "soppressata di", "speck di", "salame di", "mortadella di mare", "lardo di mare", "pancetta di", "guanciale di", "salamella", "salsiccia di tonno", "stagionat", "roastfish", "porchetta"], reparti: [MARE]}
+    carattere: "pesce lavorato come un salume: si affetta sottilissimo e si serve a crudo"
+    cotture: ["nessuna: a fette sottili"]
+    piatti: ["tagliere di mare", "carpaccio con agrumi e olio", "antipasto di mare"]
+    porzione: "circa 50-70 g a persona come antipasto"
+    usi: [antipasto, crudo]
+  - id: affumicati
+    famiglia: mare
+    nome: Pesce affumicato
+    quando: {parole: ["affumicat"], reparti: [MARE], escludi: ["crema", "tartare", "carpaccio"]}
+    carattere: "pesce affumicato da servire freddo, a fette sottili (o gia' affettato)"
+    cotture: ["nessuna: si serve freddo"]
+    piatti: ["crostini con burro", "insalate", "primi con salmone", "antipasto di mare"]
+    porzione: "circa 50-80 g a persona come antipasto"
+    usi: [antipasto]
+    simili: [salumi_mare]
+  - id: salmone_fresco
+    famiglia: mare
+    nome: Filetto di salmone
+    quando: {parole: ["salmone fresco", "filetto di salmone"], reparti: [MARE], escludi: ["affumicat"]}
+    carattere: "filetto di pesce grasso e saporito, versatile in cucina"
+    cotture: ["forno", "padella", "griglia"]
+    piatti: ["salmone al forno", "salmone in crosta", "trancio alla griglia"]
+    porzione: "circa 150-180 g a persona"
+    usi: [griglia, forno]
+  - id: sughi_mare
+    famiglia: mare
+    nome: Sughi di pesce pronti
+    quando: {parole: ["sughetto", "ragu di", "ragù di", "sugo di", "sugetto"], reparti: [MARE, DISPENSA], escludi: ["crostini"]}
+    carattere: "sugo di pesce gia' pronto: si scalda e si manteca con la pasta"
+    cotture: ["si scalda in padella con la pasta"]
+    piatti: ["spaghetti allo scoglio", "primo con ragu' di pesce"]
+    usi: [primo, sugo]
+  - id: creme_mare
+    famiglia: mare
+    nome: Creme di pesce
+    quando: {parole: ["crema di", "mantecato", "pate"], reparti: [MARE]}
+    carattere: "crema pronta da spalmare o da usare per mantecare"
+    cotture: ["nessuna: pronta all'uso"]
+    piatti: ["crostini", "tartine", "mantecatura di un primo"]
+    usi: [antipasto, primo]
+  - id: acciughe
+    famiglia: mare
+    nome: Acciughe e alici
+    quando: {parole: ["acciugh", "alici"], escludi: ["colatura", "crema"]}
+    carattere: "sapide e intense: ne bastano poche per dare carattere"
+    cotture: ["a crudo", "sciolte in padella in un soffritto"]
+    piatti: ["pizza con alici", "crostini burro e alici", "bagna cauda"]
+    usi: [pizza, antipasto, primo]
+  - id: colatura
+    famiglia: mare
+    nome: Colatura di alici
+    quando: {parole: ["colatura"]}
+    carattere: "condimento liquido molto sapido: si usa a gocce"
+    cotture: ["a crudo, a fine cottura"]
+    piatti: ["spaghetti con colatura", "verdure condite"]
+    usi: [primo]
+  - id: pesce_olio
+    famiglia: mare
+    nome: Pesce in olio e al naturale
+    quando: {parole: ["tonno", "tonnetto", "palamita", "sgombro", "ventresca", "cernia", "dentice", "branzino", "ricciola", "pesce spada", "sarde", "sardine"], reparti: [MARE, DISPENSA], escludi: ["sugo", "ragu", "crema", "pate", "paté", "affumicat", "bottarga", "peperoncin", "condimento"]}
+    carattere: "pesce conservato, pronto da usare"
+    cotture: ["nessuna: si scola e si usa"]
+    piatti: ["insalate", "primi con tonno", "vitello tonnato", "antipasti"]
+    usi: [insalata, primo, antipasto]
+
+  # ------------------------------------------------------------ OLIO E ACETO (il fruttato e' scritto nella scheda)
+  - id: olio_frittura
+    famiglia: olio
+    nome: Olio per frittura
+    quando: {parole: ["fritturista", "olio di semi"]}
+    carattere: "olio pensato per la frittura"
+    piatti: ["fritture", "pastelle"]
+    usi: [frittura]
+  - id: olio_aromatizzato
+    famiglia: olio
+    nome: Oli aromatizzati
+    quando: {parole: ["aromatizzat", "ar. ", "spray", "condimento"], sottocategorie: ["OLIO EXTRAVERGINE DI OLIVA", "OLIO, ACETO E SUCCO LIMONE"], tutte: true}
+    carattere: "olio extravergine aromatizzato: da usare a crudo, in finitura"
+    piatti: ["finitura di carni, pesce e insalate", "bruschette"]
+    usi: [finitura]
+  - id: olio_leggero
+    famiglia: olio
+    nome: Extravergine fruttato leggero
+    quando: {sottocategorie: ["OLIO EXTRAVERGINE DI OLIVA"]}
+    scheda: ["fruttato leggero"]
+    carattere: "gusto dolce e morbido che non copre: per piatti delicati"
+    piatti: ["pesce", "crudi e tartare", "insalate", "verdure"]
+    usi: [pesce, crudo, insalata]
+    simili: [olio_medio]
+  - id: olio_intenso
+    famiglia: olio
+    nome: Extravergine fruttato intenso
+    quando: {sottocategorie: ["OLIO EXTRAVERGINE DI OLIVA"]}
+    scheda: ["fruttato intenso", "medio-intenso"]
+    carattere: "gusto deciso, amaro e piccante: per piatti robusti"
+    piatti: ["zuppe di legumi", "carni alla griglia", "bruschette", "verdure"]
+    usi: [zuppa, griglia]
+    simili: [olio_medio]
+  - id: olio_medio
+    famiglia: olio
+    nome: Extravergine fruttato medio
+    quando: {sottocategorie: ["OLIO EXTRAVERGINE DI OLIVA"]}
+    scheda: ["fruttato medio"]
+    carattere: "equilibrato: l'olio per tutti i giorni, a crudo e in cottura"
+    piatti: ["uso quotidiano in cucina", "insalate", "primi", "secondi"]
+    usi: [pesce, insalata, zuppa, griglia]
+    simili: [olio_leggero, olio_intenso]
+  - id: aceto_tradizionale
+    famiglia: aceto
+    nome: Aceto balsamico tradizionale DOP
+    quando: {parole: ["tradizionale"], sottocategorie: ["ACETO"], tutte: true}
+    carattere: "lungamente invecchiato, denso: si usa a gocce, a crudo"
+    piatti: ["gocce su formaggi stagionati", "carni rosse", "primi", "fragole o gelato"]
+    usi: [finitura]
+  - id: aceto_balsamico
+    famiglia: aceto
+    nome: Aceto balsamico e condimenti
+    quando: {parole: ["balsamic", "condimento", "saporoso"], sottocategorie: ["ACETO"], tutte: true, escludi: ["perle"]}
+    carattere: "per condire insalate, marinare e glassare"
+    piatti: ["insalate", "carni alla griglia", "verdure grigliate"]
+    usi: [insalata, griglia, finitura]
+  - id: perle
+    famiglia: aceto
+    nome: Perle di balsamico
+    quando: {parole: ["perle"]}
+    carattere: "perle di condimento: decorazione e finitura del piatto"
+    piatti: ["finitura di crudi, formaggi e antipasti"]
+    usi: [finitura]

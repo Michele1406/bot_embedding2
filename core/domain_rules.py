@@ -7,6 +7,8 @@ Definisce quali categorie, sottocategorie e reparti sono incompatibili tra loro
 o hanno limiti di cardinalità (es. massimo 1 insaccato macinato per tagliere).
 """
 
+from core.testo_prodotto import prima_riga
+
 # Definiamo le regole di incompatibilità (Mutual Exclusion & Cardinality)
 INCOMPATIBILITY_MATRIX = {
     "SALUMI_MACINATI": {
@@ -54,6 +56,11 @@ INCOMPATIBILITY_MATRIX = {
     }
 }
 
+def nome_prodotto_da(prodotto: dict) -> str:
+    from core.testo_prodotto import nome_prodotto
+    return nome_prodotto(prodotto.get("document") or "") or str(prodotto.get("id"))
+
+
 def normalize_string(s: str) -> str:
     """Ritorna la stringa in maiuscolo senza spazi estremi."""
     if not s:
@@ -96,7 +103,7 @@ def check_board_violations(board_products: list, allow_terra_mare: bool = False)
         # ("SALUMI INTERI/TRANCI", "ALTRI PRODOTTI", ecc.) che altrimenti farebbero
         # sfuggire il prodotto a ogni regola della matrice.
         documento = prod.get("document", "") or ""
-        nome_prodotto = normalize_string(documento.splitlines()[0] if documento else "")
+        nome_prodotto = normalize_string(prima_riga(documento) if documento else "")
 
         # Consideriamo sottocategoria, categoria, reparto E nome prodotto per il match
         tags = [sc, cat, rep, nome_prodotto]
@@ -123,6 +130,15 @@ def check_board_violations(board_products: list, allow_terra_mare: bool = False)
             esempi = ", ".join(sc_examples.get(rule_name, [])[:4])
             violations.append(f"{rule_data['error_msg']} (referenze coinvolte: {esempi})")
             
+    # Stesso tipo di formaggio due volte ("due pecorini"): core/famiglie_tagliere.py
+    from core.famiglie_tagliere import doppioni
+    nomi_riga = {nome_prodotto_da(p): normalize_string(prima_riga(p.get("document") or "")) for p in board_products}
+    for motivo, nomi in doppioni(board_products):
+        if motivo.startswith("stesso tipo"):
+            coinvolti = ", ".join(nomi_riga.get(n, n) for n in nomi)
+            violations.append(f"Due referenze dello {motivo}: tienine una e scegli un formaggio di altro tipo "
+                              f"(referenze coinvolte: {coinvolti})")
+
     # Regola Terra-Mare
     if not allow_terra_mare:
         tm_rule = INCOMPATIBILITY_MATRIX["TERRA_MARE_MIX"]
@@ -148,7 +164,7 @@ def prodotto_appartiene_a_famiglia(prodotto: dict, rule_name: str) -> bool:
     cat = normalize_string(meta.get("categoria_prodotto", ""))
     rep = normalize_string(meta.get("reparto", ""))
     documento = prodotto.get("document", "") or ""
-    nome_prodotto = normalize_string(documento.splitlines()[0] if documento else "")
+    nome_prodotto = normalize_string(prima_riga(documento) if documento else "")
     tags = [sc, cat, rep, nome_prodotto]
     members = [normalize_string(m) for m in INCOMPATIBILITY_MATRIX[rule_name].get("members", [])]
     return any(tag in members or any(m == tag or f" {m} " in f" {tag} " or f" {m}," in f" {tag}," for m in members if m) for tag in tags)

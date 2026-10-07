@@ -67,15 +67,31 @@ class CartManager:
             "righe_ordine": cart["items"]
         }
 
-        # SIMULAZIONE INVIO API REST
-        json_payload = json.dumps(payload, indent=4, ensure_ascii=False)
-        print("\n" + "="*50)
-        print("📦 [MOCK ERP API] INVIO ORDINE AL GESTIONALE...")
-        print(f"🔗 ENDPOINT CHIAMATO: https://api.saas-food.com/v1/orders/webhook")
-        print(f"📄 PAYLOAD JSON INOLTRATO:\n{json_payload}")
-        print("="*50 + "\n")
-        
-        self.clear_cart(session_id)
-        return True, json_payload
+        import os
+        webhook_url = os.getenv("ERP_WEBHOOK_URL", "").strip()
+        if not webhook_url:
+            # Nessun gestionale configurato: l'ordine NON viene mandato a indirizzi sconosciuti, si salva in locale
+            # (data/ordini/*.json) per il commerciale. Impostare ERP_WEBHOOK_URL per l'invio automatico.
+            try:
+                cartella = os.getenv("ORDINI_DIR") or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "ordini")
+                os.makedirs(cartella, exist_ok=True)
+                nome = f"ordine_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(session_id)[:8]}.json"
+                with open(os.path.join(cartella, nome), "w", encoding="utf-8") as f:
+                    json.dump(payload, f, ensure_ascii=False, indent=2)
+                self.clear_cart(session_id)
+                return True, "Ordine registrato: il commerciale ti inviera' la conferma con la quotazione."
+            except OSError as e:
+                print(f"[ERRORE ORDINE] salvataggio locale fallito: {e}")
+                return False, "Non sono riuscito a registrare l'ordine. Riprova tra qualche istante."
+
+        import requests
+        try:
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            response.raise_for_status()
+            self.clear_cart(session_id)
+            return True, "Ordine acquisito dal gestionale."
+        except requests.exceptions.RequestException as e:
+            print(f"[ERRORE ERP] Invio ordine fallito: {e}")
+            return False, "Il gestionale non ha risposto. Riprova piu' tardi."
 
 app_cart = CartManager()

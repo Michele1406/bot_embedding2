@@ -9,6 +9,7 @@ import chromadb
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
+from core import percorsi
 
 # Carica le variabili d'ambiente dal file .env
 load_dotenv()
@@ -25,10 +26,11 @@ if not GEMINI_API_KEY:
 MODELLO_EMBEDDING = "models/gemini-embedding-2"
 
 # Percorso assoluto aggiornato
-FILE_EXCEL_ABSTRACT = os.getenv("DATA_LAKE_PATH", os.getenv("DATA_LAKE_PATH", r"C:\Users\baron\LAVORO\PRODOTTI SOFOOD")) + "\\sofood\\ABSTRACT.xlsx"
+# Fonte: PRODOTTI SOFOOD/sofood/ABSTRACT.xlsx (core/percorsi.py).
+FILE_EXCEL_ABSTRACT = os.getenv("ABSTRACT_XLSX", percorsi.dati("ABSTRACT.xlsx"))
 NOME_FOGLIO = "Abstract Database"
 PERCORSO_DB = "./database_vettoriale"
-NOME_COLLEZIONE = "catalogo_sofood"
+NOME_COLLEZIONE = os.getenv("AZIENDE_COLLECTION", "aziende_sofood")
 
 # Pausa tra una chiamata embedContent e l'altra (rate limiting lato Google).
 PAUSA_TRA_CHIAMATE_SEC = 2.0
@@ -99,9 +101,10 @@ def carica_fornitori():
     # Nessuna embedding_function qui: i vettori vengono sempre forniti a mano
     collezione = client_db.get_or_create_collection(name=NOME_COLLEZIONE)
 
-    # Rilevamento ID già presenti per inserimento incrementale
-    dati_esistenti = collezione.get()
-    id_gia_salvati = set(dati_esistenti.get("ids", []))
+    # Incrementale: si salta una scheda solo se e' IDENTICA a quella gia' salvata; se il testo in ABSTRACT.xlsx e'
+    # cambiato si ricalcola e si aggiorna (prima una scheda gia' caricata non si aggiornava mai)
+    dati_esistenti = collezione.get(include=["documents"])
+    testo_salvato = dict(zip(dati_esistenti.get("ids", []), dati_esistenti.get("documents", [])))
 
     prodotti_pronti = []
 
@@ -123,7 +126,7 @@ def carica_fornitori():
 
         doc_id = f"FORNITORE_{an_forn}_{nome.replace(' ', '_')}"
 
-        if doc_id in id_gia_salvati:
+        if testo_salvato.get(doc_id) == testo:
             continue
 
         # Usiamo le stesse chiavi di main_chatbot.py per massima compatibilità
@@ -150,7 +153,7 @@ def carica_fornitori():
 
     if prodotti_pronti:
         print(f"[INFO] Inserimento di {len(prodotti_pronti)} fornitori nel database...")
-        collezione.add(
+        collezione.upsert(
             documents=[p["documento"] for p in prodotti_pronti],
             metadatas=[p["metadati"] for p in prodotti_pronti],
             ids=[p["id"] for p in prodotti_pronti],

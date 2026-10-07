@@ -1,0 +1,414 @@
+﻿id;nome;categoria;protagonisti;coperti_da_catalogo;copertura;ingredienti_protagonisti_non_coperti
+ANT_06;Tagliere di Salumi e Formaggi con Giardiniera;tagliere;2;2;alta;
+ANT_TERRA_02;Tagliere di Salumi e Formaggi;tagliere;2;2;alta;
+TAGLIERE_04;Degustazione di Formaggi;tagliere;2;2;alta;
+TAGLIERE_05;Degustazione di Prosciutti;tagliere;1;1;alta;
+TAGLIERE_06;Culatello con Giardiniera;tagliere;2;1;media;culatello o culatta stagionata
+TAGLIERE_07;Lardo Stagionato con Miele, Noci e Pane;tagliere;2;2;alta;
+TAGLIERE_08;Cassetta di Pani Misti;tagliere;1;0;bassa;pane assortito
+TAGLIERE_09;Tagliere di Salumi Selezionati;tagliere;1;1;alta;
+TAGLIERE_10;Tagliere di Formaggi con Confetture e Miele;tagliere;1;1;alta;
+TAGLIERE_11;Tagliere Iberico di Salumi Spagnoli;tagliere;1;1;alta;
+TAGLIERE_12;Tagliere di Mare Fritto;tagliere;2;2;alta;
+TAGLIERE_13;Tagliere di Bufala e Prosciutto Crudo Stagionato;tagliere;2;2;alta;
+TAGLIERE_14;Tagliere con Prosciutto Stagionato, Rucola e Burrata;tagliere;2;1;media;burrata
+TAGLIERE_15;Tagliere di Formaggi Misti con Miele e Confetture;tagliere;1;1;alta;
+TAGLIERE_16;Tagliere Misto di Salumi e Formaggi di Maiale Nero;tagliere;2;2;alta;
+TAGLIERE_17;Tagliere di Salumi di Mare;tagliere;2;2;alta;
+TAGLIERE_18;Tagliere Grande Misto Salumi, Formaggi e Verdure (min. 2 persone);tagliere;2;2;alta;
+ANT_05;Baccalà in Tempura con Salsa Teriyaki e Barbabietola;antipasto;1;1;alta;
+ANT_07;Straccetti di Pasta Croccante con Burrata, Acciughe e Gazpacho;antipasto;3;2;media;burrata fresca
+ANT_08;Ciabattina con Pastrami di Manzo, Senape al Miele e Chimichurri;antipasto;2;2;alta;
+ANT_09;Bocconcini di Mozzarella con Carciofo Arrosto e Stracciatella;antipasto;2;1;media;mozzarella vaccina fresca
+ANT_16;Polpo Arrosto con Rucola e Pomodorini Semi-Dry;antipasto;1;1;alta;
+ANT_17;Baccalà Mantecato con Olive e Limone;antipasto;1;1;alta;
+ANT_18;Panzanella con Tartare di Gambero e Burrata;antipasto;3;1;bassa;"pane raffermo; gambero crudo"
+ANT_19;Salmone Marinato con Mayo allo Yogurt;antipasto;1;0;bassa;salmone marinato
+ANT_20;Parmigiana di Melanzane;antipasto;2;2;alta;
+ANT_21;Babaganoush di Melanzane con Crostini;antipasto;1;1;alta;
+ANT_22;Caciocavallo alla Brace con Pomodorino e Rucola;antipasto;1;1;alta;
+ANT_23;Mortadella al Pistacchio alla Brace con Glassa Balsamica;antipasto;1;1;alta;
+ANT_24;Polpette di Carne al Sugo Tradizionale;antipasto;2;2;alta;
+ANT_25;Burrata con Capocollo e Pomodorino Soleggiato;antipasto;2;1;media;burrata
+ANT_26;Tartare di Manzo Battuta al Coltello;antipasto;1;0;bassa;manzo per tartare
+ANT_30;Tacos di Pane con Tartare di Manzo e Caprino;antipasto;2;0;bassa;"pane per tacos; manzo per tartare"
+ANT_31;Tacos di Pane con Tartare di Salmone e Avocado;antipasto;2;1;media;pane per tacos
+ANT_32;Seppia Grigliata con Maionese Aioli;antipasto;1;1;alta;
+ANT_33;Carpaccio di Black Angus con Dressing di Bufala;antipasto;1;0;bassa;manzo per carpaccio
+ANT_34;Sashimi di Salmone;antipasto;1;0;bassa;salmone crudo
+ANT_35;Carpaccio di Pesce Spada con Frutti Rossi;antipasto;1;1;alta;
+ANT_36;Crostone con Salmone Marinato e Crema di Avocado;antipasto;2;0;bassa;"salmone marinato; pane rustico"
+ANT_38;Bruschette con Pomodorini Confit e Stracciatella;antipasto;2;1;media;pane per bruschetta
+ANT_39;Bruschette con Caciocavallo e Zucchine alla Scapece;antipasto;2;1;media;pane per bruschetta
+ANT_40;Bruschette con Crema di Caprino, Capocollo e Fichi;antipasto;2;1;media;pane per bruschetta
+ANT_41;Caesar Salad con Pollo Grigliato;antipasto;2;1;media;pollo grigliato
+ANT_42;Supplì con Prosciutto e Bufala;antipasto;1;1;alta;
+ANT_43;Timballo di Pasta al Ragù;antipasto;2;1;media;ragù di carne
+ANT_44;Crocchè di Patate alla Gricia con Crema di Cacio e Pepe;antipasto;1;1;alta;
+ANT_45;Timballo Ripieno di Provola Affumicata al Pesto;antipasto;2;2;alta;
+ANT_MARE_01;Cocktail di Gamberi in Salsa Rosa;antipasto;2;1;media;salsa rosa
+ANT_MARE_02;Insalata di Polpo con Patate e Datterini;antipasto;1;1;alta;
+ANT_MARE_03;Tartare di Salmone Fresco agli Agrumi;antipasto;1;1;alta;
+ANT_MARE_04;Carpaccio di Salmone Affumicato e Spada Marinato;antipasto;2;2;alta;
+ANT_MARE_06;Degustazione di Acciughe del Cantabrico con Burro e Pane;antipasto;3;3;alta;
+ANT_TERRA_01;Roastbeef con Salsa Tonnata e Capperi;antipasto;2;1;media;roastbeef cotto a fette
+ANT_TERRA_03;Burrata con Prosciutto Crudo;antipasto;2;1;media;burrata fresca
+ANT_TERRA_04;Carpaccio di Carne Salada con Rucola e Grana;antipasto;1;1;alta;
+FRITTI_01;Crocchè di Patate Artigianale con Grana e Pepe;antipasto;2;2;alta;
+FRITTI_02;Arancino Tradizionale al Ragù con Cuore Filante;antipasto;3;3;alta;
+FRITTI_03;Frittatina di Pasta Tradizionale alla Besciamella e Carne;antipasto;3;2;media;besciamella cremosa densa
+FRITTI_04;Frittatina di Pasta alla Carbonara con Guanciale e Carbocrema;antipasto;3;3;alta;
+FRITTI_05;Panzerotti Artigianali con Bufala e Pomodoro;antipasto;1;1;alta;
+FRITTI_06;Polpette di Scottona con Fonduta di Parmigiano;antipasto;1;0;bassa;scottona macinata
+FRITTI_07;Caciocavallo in Tempura con Miele;antipasto;1;1;alta;
+FRITTI_08;Polpetta Fritta con Guanciale Croccante e Pecorino;antipasto;1;0;bassa;manzo macinato
+FRITTI_09;Crocchetta di Patate con Gorgonzola e Mortadella;antipasto;1;1;alta;
+FRITTI_10;Polpette Vegetariane con Provola e Caciocavallo;antipasto;1;1;alta;
+INS_06;Insalata con Salmone Affumicato e Avocado;antipasto;2;1;media;insalata verde
+INS_07;Insalata con Tonno e Uovo;antipasto;2;1;media;insalata verde
+INS_08;Insalata con Pollo Grigliato e Grana;antipasto;2;0;bassa;"insalata verde; pollo grigliato"
+INS_09;Insalata Greca con Feta e Olive;antipasto;2;0;bassa;"feta; insalata verde"
+INS_10;Insalata con Speck, Mele e Noci;antipasto;2;1;media;insalata verde
+INS_11;Piatto Vegetariano con Bufala e Olive;antipasto;2;1;media;insalata verde
+INS_12;Insalata con Salmone Affumicato, Noci e Kiwi;antipasto;2;1;media;insalata verde
+INS_13;Insalata con Petto di Pollo Arrosto e Formaggio Filante;antipasto;2;0;bassa;"insalata verde; pollo arrosto"
+MARITOZZO_01;Maritozzo Salato con Tartare di Gambero Rosso e Mayo alle Erbe;antipasto;2;0;bassa;"gamberi rossi freschi; maritozzo o brioche salata"
+MARITOZZO_02;Maritozzo Salato con Salmone Marinato e Stracciatella;antipasto;3;1;bassa;"maritozzo o pan brioche salato; stracciatella fresca"
+MARITOZZO_03;Maritozzo Salato con Spuma di Ricotta, Zucchine e Provolone del Monaco;antipasto;3;2;media;maritozzo o pan brioche salato
+MARITOZZO_04;Maritozzo Salato con Roastbeef e Salsa Tonnata;antipasto;3;1;bassa;"roastbeef cotto a fette sottili; maritozzo salato"
+SCROCCH_02;Scrocchiarella con Baccalà Mantecato e Polvere di Olive;antipasto;2;1;media;pizza in pala o base scrocchiarella
+SEC_CARNE_06;Tartare di Manzo con Porcini;antipasto;2;2;alta;
+SEC_MARE_07;Tonno Rosso in Olio con Pomodori Semi-Dry e Olive Taggiasche;antipasto;1;1;alta;
+TOAST_01;Toast con Prosciutto Cotto e Toma;antipasto;3;2;media;pane a cassetta o pan brioche
+TOAST_03;Toast con Prosciutto Cotto Affumicato e Gruyère;antipasto;3;1;bassa;"formaggio gruyère o fontina d'alpeggio; pane in cassetta artigianale"
+ANT_27;Crudités con Maionese Homemade;aperitivo;1;1;alta;
+ANT_28;Crudo alla Barese;aperitivo;1;1;alta;
+ANT_29;Tzatziki con Pane Pita;aperitivo;1;1;alta;
+ANT_MARE_05;Cicchetti e Crostini di Mare;aperitivo;2;2;alta;
+PRIMO_MARE_01;Spaghetti allo Scoglio con Frutti di Mare;primo;2;1;media;frutti di mare misti
+PRIMO_MARE_02;Linguine Veraci alle Vongole;primo;2;1;media;vongole veraci con guscio
+PRIMO_MARE_03;Fusilloni Cacio e Pepe con Cozze;primo;3;2;media;cozze fresche
+PRIMO_MARE_04;Gnocchi con Polpo e Olive;primo;2;0;bassa;"polpo a pezzetti; gnocchi di patate"
+PRIMO_MARE_05;Spaghettone in Bisque di Gamberi Rossi e Limone;primo;3;1;bassa;"gamberi rossi o crostacei da crudo; bisque o fumetto di crostacei"
+PRIMO_MARE_06;Paella di Pesce per Condivisione;primo;2;1;media;misto di pesce e crostacei
+PRIMO_MARE_07;Panciotti Ripieni di Gamberi e Zucchine;primo;2;1;media;pasta ripiena
+PRIMO_TERRA_01;Ravioli alla Burrata con Pomodorini e Spinaci;primo;1;0;bassa;ravioli ripieni di burrata
+PRIMO_TERRA_02;Fusilloni al Ragù di Coniglio e Ricotta Affumicata;primo;2;2;alta;
+PRIMO_TERRA_03;Gnocchi di Patate al Gorgonzola e Noci;primo;2;1;media;gnocchi di patate
+PRIMO_TERRA_04;Tagliatelle all'Uovo con Speck e Funghi;primo;3;3;alta;
+PRIMO_TERRA_05;Spaghetti alla Carbonara Tradizionale;primo;4;3;media;tuorli d'uovo freschi
+PRIMO_TERRA_06;Mezze Maniche alla Nerano con Zucchine e Guanciale;primo;4;3;media;zucchine fresche per scapece
+PRIMO_TERRA_07;Parmigiana di Melanzane Rivisitata con Stracciatella;primo;2;2;alta;
+BURGER_01;Burger con Cheddar, Bacon Affumicato e Salsa Burger;secondo;2;1;media;pane per burger
+BURGER_02;Burger con Scamorza Affumicata e Melanzane a Funghetto;secondo;2;1;media;pane per burger
+BURGER_03;Burger di Pollo Fritto con Salsa Senape e Lime;secondo;2;0;bassa;"pane per burger; pollo per burger"
+INSALATA_01;Caesar Salad con Pollo Grigliato e Grana;secondo;2;1;media;insalata verde mista
+INSALATA_02;Insalatona con Gamberi, Salmone e Avocado;secondo;3;1;bassa;"gamberi lessati o scottati; valeriana o misticanza"
+PANINO_01;Panino con Burrata, Alici, Cime di Rapa e Datterini;secondo;4;2;media;"pane ai cereali o ciabatta; burrata fresca"
+PANINO_02;Panino con Roastbeef, Pecorino, Grana e Salsa di Rucola;secondo;3;1;bassa;"roastbeef cotto di manzo; ciabattina di grano duro"
+PANINO_03;Panino con Gorgonzola e Nduja;secondo;3;3;alta;
+PANINO_04;Panino con Porchetta, Crescenza e Pomodori Secchi;secondo;3;1;bassa;"crescenza o stracchino fresco; porchetta artigianale a fette"
+PANINO_05;Crescia con Porchetta, Provola e Cime di Rapa;secondo;3;2;media;crescia sfogliata marchigiana o piadina sfogliata
+SCROCCH_01;Scrocchiarella con Cotoletta di Vitello, Misticanza e Mayo;secondo;2;1;media;cotoletta di vitello impanata
+SEC_CARNE_01;Tagliata di Manzo con Rucola e Scaglie di Grana;secondo;1;1;alta;
+SEC_CARNE_02;Costine di Maiale Glassate al Barbecue;secondo;2;0;bassa;"costine di maiale intere; salsa barbecue artigianale"
+SEC_CARNE_03;Hamburger Gourmet con Cheddar e Bacon;secondo;3;1;bassa;"formaggio cheddar o caciotta fondente; hamburger di manzo 180g"
+SEC_CARNE_04;Carne Salada alla Piastra con Fagioli Borlotti;secondo;2;2;alta;
+SEC_CARNE_05;Tagliata di Manzo con Patate al Sale e Salsa Demi-Glace;secondo;1;1;alta;
+SEC_CARNE_07;Roastbeef con Salsa Tonnata e Acciughe;secondo;2;1;media;roastbeef di manzo a fette sottili
+SEC_CARNE_20;Cotoletta alla Milanese con Patate;secondo;1;0;bassa;carne per cotoletta
+SEC_CARNE_21;Filetto di Manzo al Pepe Verde;secondo;1;0;bassa;filetto di manzo
+SEC_CARNE_22;Galletto alla Brace;secondo;1;1;alta;
+SEC_CARNE_23;Entrecôte ai Funghi Porcini;secondo;2;1;media;entrecôte di manzo
+SEC_CARNE_24;Braciole di Manzo a Bassa Temperatura;secondo;1;0;bassa;braciola di manzo
+SEC_CARNE_25;Bombette di Suino Nero con Salse;secondo;1;0;bassa;bombette di suino
+SEC_CARNE_26;Pulled Pork con Coleslaw;secondo;2;0;bassa;"pane per burger; pulled pork"
+SEC_CARNE_27;Sovraccoscia di Pollo Marinata e Fritta con Paprika;secondo;1;1;alta;
+SEC_CARNE_28;Entrecote di Manzo con Insalata di Rucola, Noci e Pere;secondo;1;0;bassa;entrecote di manzo
+SEC_CARNE_29;Straccetti di Manzo con Insalata e Grana;secondo;1;0;bassa;manzo a straccetti
+SEC_CARNE_30;Hamburger di Manzo al Piatto;secondo;1;1;alta;
+SEC_CARNE_31;Hamburger Scomposto di Manzo di Razza Pregiata;secondo;1;1;alta;
+SEC_CARNE_32;Entrecote ai Funghi Porcini con Bufala e Pistacchio;secondo;1;0;bassa;entrecote di manzo
+SEC_CARNE_33;Tartare di Manzo con Uovo Marinato e Pepe di Sichuan;secondo;1;0;bassa;manzo per tartare
+SEC_CARNE_34;Tagliata di Manzo con Rucola e Parmigiano;secondo;1;0;bassa;manzo per tagliata
+SEC_MARE_01;Frittura Mista di Calamari e Gamberi;secondo;2;0;bassa;"gamberi sgusciati; calamari ad anelli"
+SEC_MARE_02;Filetto di Salmone alla Griglia con Verdure;secondo;1;1;alta;
+SEC_MARE_03;Impepata Tradizionale di Cozze;secondo;2;1;media;cozze fresche con guscio
+SEC_MARE_04;Tentacoli di Polpo alla Brace su Crema di Hummus;secondo;2;0;bassa;"tentacoli di polpo; hummus o crema di ceci"
+SEC_MARE_05;Insalata Tiepida di Mare con Gamberi, Calamari, Polpo e Agrumi;secondo;2;2;alta;
+SEC_MARE_06;Sandwich ai Cereali con Salmone, Burrata e Datterini Confit;secondo;3;2;media;burrata fresca o stracciatella
+SEC_MARE_08;Capesante Gratinate;secondo;1;0;bassa;capesante
+SEC_MARE_09;Sogliola ai Ferri;secondo;1;0;bassa;sogliola
+SEC_MARE_10;Misto di Crostacei alla Griglia;secondo;1;1;alta;
+SEC_MARE_11;Orata al Mediterraneo alla Griglia;secondo;1;0;bassa;orata
+SEC_MARE_12;Polpo Croccante con Crema di Piselli;secondo;1;1;alta;
+TOAST_02;Toast con Pastrami, Provola Affumicata e Cetriolini;secondo;3;3;alta;
+CONT_01;Patate Fritte;contorno;1;1;alta;
+CONT_02;Patate al Forno;contorno;1;1;alta;
+CONT_03;Verdure Grigliate;contorno;1;1;alta;
+CONT_04;Insalata Mista;contorno;1;1;alta;
+CONT_05;Hummus di Ceci con Pane;contorno;1;1;alta;
+CONT_06;Pannocchia di Mais alla Griglia;contorno;1;0;bassa;mais in pannocchia
+ANT_37;Club Sandwich con Tacchino, Bacon e Uovo;panino;2;0;bassa;"pane a cassetta; tacchino arrosto"
+PANINO_11;Panino con Tartare di Tonno, Mozzarella e Datterino;panino;2;1;media;pane per panino
+PANINO_12;Panino con Braciola di Manzo a Bassa Temperatura;panino;2;0;bassa;"pane per panino; braciola di manzo"
+PANINO_13;Panino con Polpo Grigliato e Bufala;panino;2;1;media;pane per panino
+PAD_01;Padellino al Nero di Seppia con Gamberoni e Burrata;pizza;2;1;media;burrata fresca
+PAD_02;Padellino con Vitello Tonnato e Scarola;pizza;2;1;media;vitello cotto a bassa temperatura a fette
+PIZZA_01;Pizza Margherita;pizza;2;2;alta;
+PIZZA_02;Pizza con Pomodoro Giallo e Datterini;pizza;2;2;alta;
+PIZZA_03;Pizza Romana;pizza;3;3;alta;
+PIZZA_04;Pizza Calabrese;pizza;2;2;alta;
+PIZZA_05;Pizza Salamino Piccante;pizza;3;3;alta;
+PIZZA_06;Pizza Ortolana;pizza;3;2;media;verdure miste grigliate
+PIZZA_07;Pizza Prosciutto e Funghi;pizza;3;3;alta;
+PIZZA_08;Pizza Capricciosa;pizza;3;3;alta;
+PIZZA_09;Calzone Classico Farcito;pizza;3;2;media;ricotta fresca vaccina
+PIZZA_10;Pizza Quattro Formaggi;pizza;2;2;alta;
+PIZZA_11;Pizza ai Frutti di Mare;pizza;2;2;alta;
+PIZZA_12;Pizza Burrata e Crudo di Parma;pizza;2;1;media;burrata fresca intera
+PIZZA_13;Pizza Norvegia con Burrata e Salmone;pizza;3;2;media;burrata o stracciatella
+PIZZA_AUT_01;Pizza su Base di Patate con Macinato di Maiale Nero;pizza;3;2;media;burrata
+PIZZA_AUT_02;Pizza con Pomodoro San Marzano, Tonno e Acciughe;pizza;2;2;alta;
+PIZZA_AUT_03;Pizza con Friarielli, Salsiccia e Olive Taggiasche;pizza;2;2;alta;
+PIZZA_AUT_04;Pizza Bianca con Mortadella, Burrata e Pomodorino Semi Dry;pizza;3;2;media;burrata
+PIZZA_AUT_05;Pizza con Nduja, Stracciatella e Peperoncino;pizza;2;2;alta;
+PIZZA_AUT_06;Pizza con Pomodorino del Piennolo, Acciughe e Pecorino;pizza;2;2;alta;
+PIZZA_AUT_07;Pizza con Bresaola di Tonno, Tartufo Nero e Nocciole;pizza;2;2;alta;
+PIZZA_AUT_08;Pizza con Ricotta, Acciughe e Confettura di Prugne;pizza;1;1;alta;
+PIZZA_AUT_09;Pizza con Bufala, Funghi Porcini e Tartufo Nero;pizza;3;3;alta;
+PIZZA_AUT_10;Pizza con Gambero Rosso Crudo e Maionese allo Zenzero;pizza;1;1;alta;
+PIZZA_AUT_11;Pizza con Bufala, Cipolla Rossa Cotta alla Birra e Tonno;pizza;2;2;alta;
+PIZZA_AUT_12;Pizza con Tartare di Manzo e Uovo Marinato;pizza;1;0;bassa;manzo per tartare
+PIZZA_CLASS_01;Marinara con Aglio e Capperi;pizza;1;1;alta;
+PIZZA_CLASS_02;Pizza Bianca con Mortadella e Granella di Pistacchio;pizza;2;2;alta;
+PIZZA_CLASS_03;Pizza Bianca con Porcini Trifolati e Macinato di Maiale;pizza;2;2;alta;
+PIZZA_CLASS_04;Pizza Bianca con Patate e Guanciale;pizza;2;2;alta;
+PIZZA_CONTEMP_01;Pizza con Zucchine e Provolone del Monaco;pizza;3;3;alta;
+PIZZA_CONTEMP_02;Pizza con Mortadella e Ricotta al Pistacchio;pizza;2;2;alta;
+PIZZA_CONTEMP_03;Pizza Amatriciana con Datterino Giallo, Guanciale e Pecorino;pizza;3;3;alta;
+PIZZA_CONTEMP_04;Pizza con Salmone e Guacamole;pizza;2;1;media;guacamole di avocado fresco e lime
+PIZZA_CONTEMP_05;Pizza con Manzo Affumicato e Bufala;pizza;3;3;alta;
+PIZZA_CONTEMP_06;Pizza Margherita con Pomodori Affumicati;pizza;2;2;alta;
+PIZZA_CONTEMP_07;Pizza Margherita Piccante con Caciocavallo e Burrata;pizza;3;2;media;burrata fresca
+PIZZA_CONTEMP_08;Pizza Piccante con Tonno e Nduja;pizza;3;3;alta;
+PIZZA_CONTEMP_09;Pizza con Fichi Freschi, Formaggio Erborinato e Prosciutto Crudo;pizza;3;3;alta;
+PIZZA_CONTEMP_10;Pizza con Fiori di Zucca, Crema di Zucchine e Bacon;pizza;3;2;media;fiori di zucca freschi
+PIZZA_CONTEMP_11;Pizza nel Ruoto con Bombetta e Chimichurri;pizza;2;1;media;bombette pugliesi di maiale farcite
+PIZZA_CONTEMP_12;Pizza nel Ruoto con Alici, Yuzu e Caviale;pizza;3;3;alta;
+PIZZA_CONTEMP_13;Pizza Bufala a Crudo con Parmigiano;pizza;2;2;alta;
+PIZZA_CONTEMP_14;Pizza Napoli con Acciughe e Capperi;pizza;3;3;alta;
+PIZZA_CONTEMP_15;Pizza Marinara con Aglio, Olive e Acciughe;pizza;1;1;alta;
+PIZZA_CONTEMP_16;Pizza Crudaiola con Datterini Semi-Dry e Cacioricotta;pizza;2;2;alta;
+PIZZA_CONTEMP_17;Pizza Napoli Tonnata con Acciughe e Capperi;pizza;3;3;alta;
+PIZZA_CONTEMP_18;Pizza Vitel Tonné con Roastbeef e Salsa Tonnata;pizza;3;2;media;roastbeef di vitello
+PIZZA_CONTEMP_19;Pizza Aglio, Olio e Peperoncino con Datterini;pizza;2;2;alta;
+PIZZA_C_01;Pizza Margherita con Datterino a Pacchetelle e Bufala;pizza;2;2;alta;
+PIZZA_C_02;Pizza Ripiena con Prosciutto Crudo Fuori Cottura;pizza;3;3;alta;
+PIZZA_C_03;Pizza con Salsiccia, Capocollo e Funghi Porcini;pizza;3;3;alta;
+PIZZA_C_04;Pizza con Salame di Cinghiale, Porcini e Crema al Tartufo;pizza;3;3;alta;
+PIZZA_C_05;Pizza Bianca con Cardoncelli, Capocollo e Caciocavallo;pizza;2;2;alta;
+PIZZA_C_06;Pizza con Radicchio, Tacchino Arrosto e Mela;pizza;2;1;media;tacchino arrosto
+PIZZA_C_07;Pizza su Vellutata di Zucca con Speck e Zola;pizza;2;2;alta;
+PIZZA_C_08;Pizza su Vellutata di Zucca con Nduja e Porchetta;pizza;3;3;alta;
+PIZZA_C_09;Pizza su Crema di Carciofi con Porchetta e Cardoncelli;pizza;2;2;alta;
+PIZZA_C_10;Pizza con Salmone Affumicato e Vellutata di Melanzane;pizza;2;2;alta;
+PIZZA_C_11;Pizza con Gamberi Rossi Crudi, Lardo e Zucchine;pizza;2;2;alta;
+PIZZA_C_12;Pizza con 4 Consistenze di Pomodoro e Acciughe;pizza;2;1;media;stracciatella
+PIZZA_MARG_01;Margherita Classica;pizza;2;2;alta;
+PIZZA_MARG_02;Margherita con Bufala Fuori Cottura;pizza;2;2;alta;
+PIZZA_MARG_03;Margherita Ripiena con Ricotta e Burrata;pizza;2;2;alta;
+PIZZA_MARG_04;Margherita Gialla su Pomodorino Giallo;pizza;2;2;alta;
+DOLCE_01;Panna Cotta con Frutti di Bosco;dolce;2;1;media;panna cotta artigianale
+DOLCE_02;Tiramisù Tradizionale al Caffè;dolce;2;2;alta;
+DOLCE_03;Babà al Rum con Gelato e Panna;dolce;2;1;media;babà imbevuto al rum
+DOLCE_04;Dolce al Cioccolato Fondente con Cocco e Frutto della Passione;dolce;3;2;media;mousse di cocco e panna
+DOLCE_05;Torta di Nocciole con Gelato al Fiordilatte;dolce;2;0;bassa;"gelato artigianale al fiordilatte; torta di nocciole artigianale"
+DOLCE_06;Coppa di Mascarpone con Crema al Pistacchio o Cioccolato;dolce;2;1;media;mascarpone fresco montato
+DOLCE_07;Crème Brûlée;dolce;1;1;alta;
+DOLCE_08;Cheesecake ai Frutti Rossi;dolce;1;1;alta;
+DOLCE_09;Coppa di Gelato Artigianale con Frutta Fresca;dolce;1;1;alta;
+DOLCE_10;Cannolo Artigianale con Ricotta e Cioccolato;dolce;1;0;bassa;ricotta di pecora
+TRIS_BAR_01;Tris da Bar Classico per Aperitivo;aperitivo;2;2;alta;
+TRIS_BAR_02;Aperitivo Caldo Finger Food da Pub;aperitivo;1;1;alta;
+TAGLIERE_COMPLETO_01;Tagliere Completo di Salumi e Formaggi Artigianali;tagliere;2;2;alta;
+PINSA_01;Pinsa Romana Gourmet con Caciocavallo, Capocollo di Martina Franca e Pomodoro;antipasto;3;3;alta;
+PINSA_02;Pinsa Romana Rustica con Provola Affumicata e Pancetta;antipasto;3;3;alta;
+TAGLIERE_MARE_ITALFISH;Tagliere Gourmet di Salumi di Mare;tagliere;1;1;alta;
+TAPAS_SPAGNA_SOLERA;Degustazione di Tapas e Salumi Spagnoli;tagliere;2;2;alta;
+DESSERT_CREMOSO_SAN_SALVATORE;Dessert al Cucchiaio Cremoso di Bufala in Terracotta;dolce;1;1;alta;
+PINSA_PUB_BISTROT;Pinsa Romana Gourmet per Pub e Bistrot;antipasto;3;2;media;burrata o stracciatella pugliese
+PRIMO_RICCI_MARE;Spaghetti alla Polpa di Riccio di Mare;primo;2;2;alta;
+SO_PRIMO_MARE_01;Spaghettoni alla Polpa di Riccio di Mare e Polvere di Limone;primo;2;2;alta;
+SO_PRIMO_MARE_02;Linguine alla Bottarga di Muggine, Zeste di Limone e Mollicata Croccante;primo;2;2;alta;
+SO_PRIMO_MARE_03;Paccheri al Datterino Rosso Così Com'è e Tartare di Tonno a Crudo;primo;3;3;alta;
+SO_PRIMO_MARE_04;Scialatielli al Nero di Seppia con Totano e Granelli di Olive Nere;primo;3;3;alta;
+SO_PRIMO_MARE_05;Calamaretti di Gragnano con Filetti di Ricciola e Pomodorino Giallo;primo;2;2;alta;
+SO_PRIMO_MARE_06;Mezzi Paccheri con Ragù di Polpo e Polvere di Arancia;primo;2;2;alta;
+SO_PRIMO_MARE_07;Tonnarelli all'Uovo Marilungo con Polpa di Granchio e Datterino Pelato;primo;2;2;alta;
+SO_PRIMO_MARE_08;Fregola Sarda Risottata con Frutti di Mare e Bottarga;primo;2;2;alta;
+SO_PRIMO_MARE_09;Chitarra all'Uovo con Salmone Baltik e Granella di Pistacchio DOP;primo;2;2;alta;
+SO_PRIMO_MARE_10;Bucatini Gentile con Colatura di Alici, Zeste di Limone e Mollica Tostata;primo;2;2;alta;
+SO_PRIMO_MARE_11;Fusilli Lunghi Gentile con Baccalà Skrei e Polvere di Pomodoro;primo;2;2;alta;
+SO_PRIMO_MARE_12;Spaghetti Gentile alla Spaghettata di Mare e Bottarga di Muggine;primo;2;2;alta;
+SO_PRIMO_MARE_13;Caserecce Gentile con Tartare di Pesce Spada, Datterini Semi-Secchi e Menta;primo;2;2;alta;
+SO_PRIMO_MARE_14;Maccheroncini IGP Marilungo con Bresaola di Tonno al Pepe e Datterino Giallo;primo;2;2;alta;
+SO_PRIMO_MARE_15;Penne Gentile con Tonno Marinato, Barbabietola e Capperi Canditi;primo;2;2;alta;
+SO_PRIMO_MARE_16;Tagliolini all'Uovo Marilungo con Carpaccio di Salmone e Pepe Rosa;primo;2;2;alta;
+SO_PRIMO_MARE_17;Tubettoni Gentile alla Marinara di Mare con San Marzano DOP;primo;3;3;alta;
+SO_PRIMO_MARE_18;Eliche Gentile con Roastfish di Pesce Spada e Datterini Arancioni;primo;2;2;alta;
+SO_PRIMO_MARE_19;Pappardelle all'Uovo Marilungo con Speck di Mare e Acqua di Cipolla;primo;2;2;alta;
+SO_PRIMO_MARE_20;Fettuccine al Limone Marilungo con Tartare di Salmone Baltik;primo;2;2;alta;
+SO_PRIMO_TERRA_01;Orecchiette Pugliesi con Cime di Rapa Di Tria e Peperoncino;primo;2;2;alta;
+SO_PRIMO_TERRA_02;Paccheri Gentile con Funghi Cardoncelli Di Tria e Pancetta in Conca;primo;3;3;alta;
+SO_PRIMO_TERRA_03;Fusilli Lunghi Gentile al Ragù Tradizionale di Fassona Oberto;primo;3;3;alta;
+SO_PRIMO_TERRA_04;Candele Lunghe Gentile alla Genovese Napoletana di Fassona;primo;2;2;alta;
+SO_PRIMO_TERRA_05;Bucatini Gentile all'Amatriciana con San Marzano e Guanciale di Adò;primo;3;3;alta;
+SO_PRIMO_TERRA_06;Spaghettoni Gentile alla Gricia Tradizionale con Pepe Tostato;primo;2;2;alta;
+SO_PRIMO_TERRA_07;Pappardelle all'Uovo Marilungo al Ragù Bianco di Salsiccia Lovison;primo;2;1;media;Salsiccia Lovison
+SO_PRIMO_TERRA_08;Tagliatelle al Tartufo Marilungo Mantecate al Burro al Tartufo Calugi;primo;2;2;alta;
+SO_PRIMO_TERRA_09;Mafalde Gentile con Crema di Zucca Finagricola, Salsiccia e Salvia;primo;3;2;media;Salsiccia Lovison
+SO_PRIMO_TERRA_10;Pennoni Gentile con Spicchi di Carciofi Di Tria e Capocollo Croccante;primo;3;3;alta;
+SO_PRIMO_TERRA_11;Caserecce Gentile con Cicoriella Selvatica Di Tria e Caciocavallo Podolico;primo;3;3;alta;
+SO_PRIMO_TERRA_12;Orecchiette Napoletane Gentile con Asparagi Di Tria e Lardo di Colonnata;primo;3;3;alta;
+SO_PRIMO_TERRA_13;Tortiglioni Gentile con Vellutata di Pizzutello e Stracciatella Fresca;primo;3;2;media;Stracciatella Caseificio Stella di Cecca
+SO_PRIMO_TERRA_14;Spaghetti Gentile all'Assassina Tradizionale Barese Bruciata;primo;2;2;alta;
+SO_PRIMO_TERRA_15;Maccheroncini IGP Marilungo al Musetto Friulano Lovison e Rosmarino;primo;2;1;media;Musetto Lovison
+SO_PRIMO_TERRA_16;Tagliatelle Gentile ai Funghi Porcini Calugi e Burro Nobile;primo;2;2;alta;
+SO_PRIMO_TERRA_17;Bucatini Gentile con Passatella di Fave e Cicorie e Peperone Crusco;primo;2;2;alta;
+SO_PRIMO_TERRA_18;Penne Gentile all'Arrabbiata con Datterini Semi-Secchi Finagricola;primo;2;2;alta;
+SO_PRIMO_TERRA_19;Quadrucci all'Uovo Marilungo in Brodo di Fassona Oberto;primo;2;2;alta;
+SO_PRIMO_TERRA_20;Ziti Corti Gentile alla Crema di Melanzane e Formaggio Crucolo;primo;3;3;alta;
+SO_SUGHI_PRONTI_01;Spaghetti Gentile al Sugo d'Astice Italfish;primo;2;2;alta;
+SO_SUGHI_PRONTI_02;Paccheri Gentile al Sughetto di Scoglio Pronto Italfish;primo;2;2;alta;
+SO_SUGHI_PRONTI_03;Calamaretti Gentile al Ragù di Pesce Spada Italfish;primo;2;2;alta;
+SO_SUGHI_PRONTI_04;Fusilli Lunghi Gentile con Crema di Scampi Pronta Italfish;primo;2;2;alta;
+SO_SUGHI_PRONTI_05;Tagliatelle Gentile con Crema di Salmone Italfish e Pepe Rosa;primo;2;2;alta;
+SO_SUGHI_PRONTI_06;Tortiglioni Gentile al Ragù di Tonno Bluefin Italfish;primo;2;2;alta;
+SO_SUGHI_PRONTI_07;Spaghetti Gentile al Sugo di Datterini Gialli Così Com'è e Bottarga;primo;3;3;alta;
+SO_SUGHI_PRONTI_08;Penne Gentile al Sugo di Datterini Rossi all'Arrabbiata Così Com'è;primo;2;2;alta;
+SO_SUGHI_PRONTI_09;Linguine Gentile con Pesto Genovese Fresco Rossi 1947;primo;2;2;alta;
+SO_SUGHI_PRONTI_10;Caserecce Gentile con Pesto di Pistacchio DOP Evergreen e Guanciale;primo;3;3;alta;
+SO_SUGHI_PRONTI_11;Bucatini Gentile al Sugo Napoli Casa Marrazzo e Parmigiano 24 Mesi;primo;2;2;alta;
+SO_SUGHI_PRONTI_12;Mezzi Paccheri Gentile con Pesto Rosso Anfosso e Stracciatella;primo;2;2;alta;
+SO_SUGHI_PRONTI_13;Eliche Gentile con Salsa Pecorino Cacio e Pepe Toscana e Mix Pepi;primo;2;2;alta;
+SO_SUGHI_PRONTI_14;Scialatielli Gentile con Sugo San Marzano DOP Marrazzo e Podolico;primo;2;2;alta;
+SO_SUGHI_PRONTI_15;Pappardelle Gentile con Crema del Tartufaio Calugi e Nocciole;primo;2;2;alta;
+SO_RISOTTO_01;Risotto Acquerello allo Zafferano Puro in Pistilli Calugi e Burro Nobile;risotto;2;2;alta;
+SO_RISOTTO_02;Risotto Acquerello ai Funghi Cardoncelli Di Tria e Crucolo Saporito;risotto;3;3;alta;
+SO_RISOTTO_03;Risotto Acquerello con Polpa di Riccio Smeralda e Polvere di Limone;risotto;2;2;alta;
+SO_RISOTTO_04;Risotto Acquerello alla Crema di Scampi Italfish e Polvere d'Arancia;risotto;2;2;alta;
+SO_RISOTTO_05;Risotto Acquerello al Nero di Seppia con Tartare di Salmone Baltik;risotto;3;3;alta;
+SO_RISOTTO_06;Risotto Acquerello al Datterino Giallo Così Com'è e Bottarga di Muggine;risotto;3;3;alta;
+SO_RISOTTO_07;Risotto Acquerello ai Funghi Porcini Calugi e Burro al Tartufo Bianco;risotto;2;2;alta;
+SO_RISOTTO_08;Risotto Acquerello alla Crema di Zucca Finagricola e Caciocavallo Podolico;risotto;3;3;alta;
+SO_RISOTTO_09;Risotto Acquerello con Asparagi Di Tria e Robiola Capriz;risotto;3;3;alta;
+SO_RISOTTO_10;Risotto Acquerello al Vino Rosso con Salsiccia Lovison e Alloro;risotto;2;1;media;Salsiccia Lovison
+SO_RISOTTO_11;Risotto ai Funghi Porcini Espresso Agricola Lodigiana;risotto;1;1;alta;
+SO_RISOTTO_12;Risotto Acquerello al Pesto di Pistacchio DOP Evergreen e Tartare di Spada;risotto;3;3;alta;
+SO_RISOTTO_13;Risotto Acquerello al San Marzano DOP e Stracciatella Pugliese;risotto;3;2;media;Stracciatella Caseificio Stella di Cecca
+SO_RISOTTO_14;Risotto Acquerello alle Cime di Rapa Di Tria e Alici del Cantabrico;risotto;3;3;alta;
+SO_RISOTTO_15;Risotto Nero Integrale Lodigiana con Baccalà Mantecato Italfish;risotto;2;2;alta;
+SO_SEC_PESCE_01;Filetto di Ricciola Bio Italfish con Spicchi di Carciofi Di Tria;secondo;2;2;alta;
+SO_SEC_PESCE_02;Lingotto di Baccalà Skrei Italfish in Umido con Datterini e Borragine;secondo;3;3;alta;
+SO_SEC_PESCE_03;Trancio di Salmone Fresco Faroe Italfish con Zucchine Dorate Di Tria;secondo;2;2;alta;
+SO_SEC_PESCE_04;Roastfish di Tonno Italfish con Parmigianina di Melanzane Di Tria;secondo;2;2;alta;
+SO_SEC_PESCE_05;Roastfish di Pesce Spada Italfish con Cicoriella Selvatica Di Tria;secondo;2;2;alta;
+SO_SEC_PESCE_06;Gran Tartare di Tonno Italfish con Pistacchio e Frittelline di Cavolfiore;secondo;2;2;alta;
+SO_SEC_PESCE_07;Tartare di Spada Italfish agli Agrumi con Stick di Melanzane Di Tria;secondo;2;2;alta;
+SO_SEC_PESCE_08;Baffa di Salmone Baltik con Asparagi Di Tria e Maionese al Tartufo;secondo;2;2;alta;
+SO_SEC_PESCE_09;Tonno in Porchetta Italfish scottato con Sponsali al Naturale Di Tria;secondo;2;2;alta;
+SO_SEC_PESCE_10;Baccalà Mantecato Italfish su Pinsa Croccante con Fiori di Zucchina;secondo;2;2;alta;
+SO_SEC_PESCE_11;Carpaccio di Pesce Spada e Salmone Italfish con Tris di Verdure Di Tria;secondo;3;3;alta;
+SO_SEC_PESCE_12;Soppressata di Polpo Italfish con Patate al Forno Speziate;secondo;2;2;alta;
+SO_SEC_PESCE_13;Tagliata di Tonno Saku Italfish in Crosta di Pistacchio con Friggitelli;secondo;2;2;alta;
+SO_SEC_PESCE_14;Lingotto di Baccalà Skrei Affumicato con Cime di Rapa Di Tria;secondo;2;2;alta;
+SO_SEC_PESCE_15;Trancio di Spada al Vapore con Frittelline Murgiamare Di Tria;secondo;2;2;alta;
+SO_SEC_CARNE_01;Costata Singola di Fassona Oberto alla Brace con Patate Hot;secondo;2;2;alta;
+SO_SEC_CARNE_02;Filetto di Anteriore di Fassona Oberto con Cardoncelli Di Tria;secondo;2;2;alta;
+SO_SEC_CARNE_03;Cube Roll di Fassona Oberto alla Griglia con Carciofi Dorati Di Tria;secondo;2;2;alta;
+SO_SEC_CARNE_04;Battuta a Coltello di Fassona Oberto con Paté al Tartufo Calugi;secondo;1;1;alta;
+SO_SEC_CARNE_05;Tagliata di Fassona Oberto con Scaglie di Crucolo e Stick di Carote;secondo;3;3;alta;
+SO_SEC_CARNE_06;Gourmet Burger di Fassona Oberto su Bun Farino con Bacon di Adò;secondo;3;3;alta;
+SO_SEC_CARNE_07;Hamburger di Maiale Nero Antiche Razze Patrone con Cime di Rapa;secondo;2;2;alta;
+SO_SEC_CARNE_08;Porchetta da Cinta Senese DOP Patrone con Parmigianina di Zucchine;secondo;2;2;alta;
+SO_SEC_CARNE_09;Musetto Tradizionale Friulano Lovison con Cicoria Ripassata;secondo;2;1;media;Musetto Lovison
+SO_SEC_CARNE_10;Salsiccia Fresca Friulana Lovison con Fiori di Zucchina Dorati;secondo;2;1;media;Salsiccia Lovison
+SO_SEC_CARNE_11;Filetto di Fassona Oberto allo Zafferano Calugi con Asparagi Di Tria;secondo;2;2;alta;
+SO_SEC_CARNE_12;Roast Beef Cotto di Fassona Oberto con Insalata di Patate Boschi;secondo;2;2;alta;
+SO_SEC_CARNE_13;Bockwurst di Fassona Oberto alla Griglia con Friggitelli Dorati Di Tria;secondo;2;2;alta;
+SO_SEC_CARNE_14;Straccetti di Fassona Oberto ai Funghi Cardoncelli Di Tria e Alloro;secondo;3;3;alta;
+SO_SEC_CARNE_15;Spezzatino Morbido di Fassona con Polenta Lodigiana e Sponsali;secondo;3;3;alta;
+SO_BURGER_GOURMET_01;Hamburger Gourmet con Buns Classico Farino, Fassona Oberto, Formaggio Fondente e Salse Biobontà;panino;2;2;alta;
+SO_BURGER_MINI_02;Tris di Mini Burger Gourmet con Mini Buns Farino, Fassona e Salse Artigianali;panino;2;2;alta;
+TAGLIERE_TOSCANA_01;Tagliere Toscano di Salumi e Pecorino;tagliere;2;2;alta;
+TAGLIERE_PIEMONTE_01;Tagliere Piemontese con Sfilaccio e Toma;tagliere;2;1;media;toma piemontese
+TAGLIERE_TRENTINO_01;Tagliere di Montagna Trentino;tagliere;2;2;alta;
+TAGLIERE_EMILIA_01;Tagliere Emiliano Prosciutto e Parmigiano;tagliere;2;2;alta;
+TAGLIERE_SARDEGNA_01;Tagliere Sardo di Mare e Pane Carasau;tagliere;2;2;alta;
+TRIS_SPAGNA_01;Tris di Tapas Iberiche da Banco;aperitivo;2;2;alta;
+RETAIL_GASTRONOMIA_01;Proposta Vaschette Pronte da Banco Gastronomia;secondo;1;1;alta;
+RETAIL_GASTRONOMIA_02;Selezione Formaggi da Banco Taglio;contorno;1;1;alta;
+RETAIL_DOLCE_01;Vetrinetta Dolci da Asporto;dolce;1;1;alta;
+PRIMO_TOSCANA_01;Pici al Ragù di Cinta Senese;primo;2;0;bassa;"pici o pasta fresca toscana; salume toscano da ragù"
+SECONDO_EMILIA_01;Tagliata su Letto di Parmigiano;secondo;2;2;alta;
+ANT_TRENTINO_01;Speck e Formaggio di Malga con Miele di Montagna;antipasto;2;1;media;formaggio di malga
+ANTIPASTO_VEGANO_01;Verdure Grigliate e Hummus;antipasto;2;1;media;hummus di ceci
+ANTIPASTO_RETAIL_01;Vetrinetta Antipasti Pronti da Asporto;antipasto;1;1;alta;
+PRIMO_AMATRICIANA;Bucatini all'Amatriciana;primo;3;3;alta;
+PRIMO_CACIO_PEPE;Cacio e Pepe;primo;2;2;alta;
+PRIMO_CAVATELLI_PISELLI;Cavatelli con Crema di Piselli e Guanciale;primo;2;2;alta;
+PRIMO_PUTTANESCA;Fusilli alla Puttanesca;primo;2;2;alta;
+PRIMO_GNOCCHI_POMODORO;Gnocchi al Pomodoro e Basilico;primo;2;1;media;gnocchi di patate
+PRIMO_SCOGLIO;Linguine allo Scoglio;primo;2;2;alta;
+PRIMO_ORECCHIETTE_CIME;Orecchiette con Cime di Rapa;primo;2;1;media;orecchiette pugliesi
+PRIMO_NORMA;Paccheri alla Norma;primo;2;2;alta;
+PRIMO_GENOVESE;Pasta alla Genovese;primo;2;2;alta;
+PRIMO_NERANO;Pasta alla Nerano;primo;3;2;media;provolone filante
+PRIMO_PASTA_FAGIOLI;Pasta e Fagioli;primo;2;2;alta;
+PRIMO_RAVIOLI_BURRO;Ravioli Burro e Salvia;primo;1;0;bassa;ravioli freschi ripieni
+PRIMO_GRICIA;Rigatoni alla Gricia;primo;2;2;alta;
+PRIMO_RISOTTO_FUNGHI;Risotto ai Funghi Porcini;primo;2;2;alta;
+PRIMO_RISOTTO_RADICCHIO;Risotto al Radicchio e Gorgonzola;primo;3;2;media;radicchio rosso
+PRIMO_RISOTTO_PESCATORA;Risotto alla Pescatora;primo;2;2;alta;
+PRIMO_CARBONARA;Spaghetti alla Carbonara;primo;2;2;alta;
+PRIMO_VONGOLE;Spaghetti alle Vongole;primo;2;2;alta;
+PRIMO_BOLOGNESE;Tagliatelle al Ragù Bolognese;primo;2;2;alta;
+PRIMO_PESTO;Trofie al Pesto Genovese;primo;2;1;media;trofie
+SECONDO_BACCALA;Baccalà alla Livornese;secondo;1;0;bassa;baccalà dissalato
+SECONDO_FRITTURA;Frittura di Paranza;secondo;1;1;alta;
+SECONDO_GRIGLIATA;Grigliata Mista di Carne;secondo;2;2;alta;
+SECONDO_POLPETTE;Polpette al Sugo;secondo;1;1;alta;
+SECONDO_POLPO_GRIGLIA;Polpo alla Griglia con Purè;secondo;1;1;alta;
+SECONDO_SALMONE;Salmone al Forno con Erbe;secondo;1;0;bassa;trancio di salmone
+SECONDO_TAGLIATA;Tagliata di Manzo con Rucola e Grana;secondo;1;1;alta;
+CONTORNO_CAPONATA;Caponata Siciliana;contorno;1;1;alta;
+CONTORNO_CARCIOFI_ROMANA;Carciofi alla Romana;contorno;1;1;alta;
+CONTORNO_CICORIA;Cicoria Ripassata in Padella;contorno;1;1;alta;
+CONTORNO_PARMIGIANA;Parmigiana di Melanzane;contorno;2;2;alta;
+CONTORNO_PEPERONATA;Peperonata;contorno;1;1;alta;
+CONTORNO_VERDURE_GRIGLIATE;Verdure Grigliate Miste;contorno;3;3;alta;
+CONTORNO_VERDURE_PASTELLA;Verdure in Pastella Fritte;contorno;1;1;alta;
+CONTORNO_ZUCCHINE_TRIFOLATE;Zucchine Trifolate;contorno;1;1;alta;
+PIZZA_TARTUFO_01;Pinsa Gourmet Tartufo e Provola;pizza;2;2;alta;
+PIZZA_MARE_01;Pinsa Gourmet ai Frutti di Mare;pizza;2;2;alta;
+DOLCE_AFFOGATO;Affogato al Caffè;dolce;1;1;alta;
+DOLCE_BABA;Babà al Rum;dolce;1;0;bassa;babà pronto in vasetto
+DOLCE_CHEESECAKE;Cheesecake ai Frutti Rossi;dolce;1;1;alta;
+TAGLIERE_RETAIL_BANCO_01;Selezione Salumi e Formaggi da Banco Bottega;tagliere;2;2;alta;
+TAGLIERE_MISTO_TERRA_MARE;Tagliere Misto Terra e Mare (su richiesta);tagliere;2;2;alta;
+TAGLIERE_VEGANO_01;Tagliere Vegetale Mediterraneo;tagliere;3;3;alta;
+APERITIVO_FORMAGGI_MIELE;Ciotolina Formaggi e Miele;aperitivo;1;0;bassa;formaggio misto a cubetti
+APERITIVO_MARE;Ciotoline Aperitivo di Mare;aperitivo;1;1;alta;
+APERITIVO_BRUSCHETTE;Trio di Bruschette Miste;aperitivo;1;1;alta;
+APERITIVO_TRIS_CLASSICO;Tris Classico Salumi, Formaggi e Olive;aperitivo;2;0;bassa;"salume misto affettato; formaggio a cubetti"
+APERITIVO_TRIS_VEGETALE;Tris Vegetale da Aperitivo;aperitivo;2;2;alta;
+PANINO_CLASSICO_BURGER;Cheeseburger Classico;panino;2;0;bassa;"pane per hamburger; hamburger di manzo"
+PANINO_VEGETARIANO;Panino Vegetariano con Verdure Grigliate;panino;2;1;media;pane per hamburger
+PANINO_PULLED_PORK;Panino al Pulled Pork;panino;2;2;alta;
+PANINO_PORCHETTA;Panino con Porchetta;panino;2;1;media;pane casereccio
+TRIS_BAR_03;Tris da Bar: Olive, Patatine e Frutta Secca;aperitivo;3;3;alta;
+TRIS_BAR_04;Tris da Bar: Olive, Taralli e Patatine;aperitivo;3;3;alta;
+TRIS_BAR_05;Tris Vegetale da Bar;aperitivo;3;3;alta;
+ANTIPASTO_SOTTOLI_01;Antipasto di Sottoli e Verdure Grigliate;antipasto;2;2;alta;
+FINGER_FOOD_BAR_01;Finger Food Caldi da Banco (da rigenerare);aperitivo;2;2;alta;

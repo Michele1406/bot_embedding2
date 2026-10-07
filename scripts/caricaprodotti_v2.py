@@ -401,7 +401,9 @@ if __name__ == "__main__":
     # ricerca (Chroma include comunque quegli elementi nelle query). Questo
     # script va usato per il caricamento iniziale o per aggiungere nuovi
     # prodotti al catalogo (quelli non ancora presenti nei metadati).
-    CARTELLA_RADICE_CATALOGO = os.getenv("DATA_LAKE_PATH", r"C:\Users\baron\LAVORO\PRODOTTI SOFOOD")
+    CARTELLA_RADICE_CATALOGO = os.getenv("DATA_LAKE_PATH")
+    if not CARTELLA_RADICE_CATALOGO:
+        raise ValueError("ERRORE: DATA_LAKE_PATH non impostata in .env")
     PERCORSO_DATABASE_VETTORIALE = "./database_vettoriale"
     CARTELLA_LOG_ANOMALIE = "./log"
 

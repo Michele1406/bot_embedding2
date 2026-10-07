@@ -118,7 +118,7 @@ FORNITORI = {
     "recco": {
         "nomi_match": ["recco"],
         "codice_fornitore": None,
-        "regione": "puglia",
+        "regione": "lazio",  # sede a Gaeta (LT): verificato dall'indirizzo nelle schede (sofood/regioni_produttori.csv)
         "ruoli": ["formaggi"],
         "attivo": True,
     },
@@ -333,6 +333,34 @@ FORNITORI = {
         "ruoli": [],
         "attivo": True,
     },
+    "suriano": {
+        "nomi_match": ["suriano"],
+        "codice_fornitore": None,
+        "regione": "calabria",
+        "ruoli": ["sottoli", "mostarde_confetture", "contorni"],
+        "attivo": True,
+    },
+    "zucchi": {
+        "nomi_match": ["zucchi", "oleificio zucchi"],
+        "codice_fornitore": None,
+        "regione": "generico",
+        "ruoli": [],
+        "attivo": True,
+    },
+    "la_valletta": {
+        "nomi_match": ["la valletta"],
+        "codice_fornitore": "19010929",
+        "regione": "generico",
+        "ruoli": [],
+        "attivo": True,
+    },
+    "masciarelli": {
+        "nomi_match": ["masciarelli"],
+        "codice_fornitore": "19010930",
+        "regione": "generico",
+        "ruoli": [],
+        "attivo": True,
+    },
 
     # ------------------------------------------------------------------
     # TEMPLATE per aggiungere un nuovo fornitore: copia il blocco sotto,
@@ -385,7 +413,7 @@ TEMI_REGIONALI = {
         "sottoli": "verdure grigliate e sott'olio pugliesi",
     },
     "trentino": {
-        "parole_chiave": ["trentin", "alto adige", "tirol", "montagna", "alpino", "dolomit", "crucolo", "capriz"],
+        "parole_chiave": ["trentin", "alto adige", "tirol", "tirolese", "montagna", "alpino", "dolomit", "crucolo", "capriz"],
         "salumi": "carne salada, salame di montagna stile trentino",
         "formaggi": "formaggi di malga e formaggi alpini stagionati",
         "formaggi_di_default": True,
@@ -400,6 +428,14 @@ TEMI_REGIONALI = {
         "pane": "grissini piemontesi",
         "mostarde_confetture": "mostarda e confetture piemontesi da abbinare ai formaggi",
     },
+    "calabria": {
+        "parole_chiave": ["calabr", "calabria", "silano", "nduja", "suriano"],
+        "salumi": "salumi piccanti calabresi, spianata, nduja, salsiccia",
+        "formaggi": "caciocavallo silano, pecorino crotonese, provola",
+        "formaggi_di_default": True,
+        "pane": "frese, pane casereccio",
+        "sottoli": "peperoncino, melanzane a filetti, cipolla rossa",
+    },
     "emilia": {
         "parole_chiave": ["emilian", "emilia", "romagna", "parma", "bologna", "modena"],
         "salumi": "prosciutto cotto, mortadella, prosciutto di Parma DOP, salumi emiliani",
@@ -408,7 +444,7 @@ TEMI_REGIONALI = {
         "pane": "piadina e grissini",
     },
     "sardegna": {
-        "parole_chiave": ["sard", "sardegna"],
+        "parole_chiave": ["sardo", "sarda", "sardi", "sardegna"],
         "mare": "bottarga di muggine, polpa di riccio, specialità di mare sarde",
         "pane": "pane carasau, guttiau",
         "formaggi_di_default": False,

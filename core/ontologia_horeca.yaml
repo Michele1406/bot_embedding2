@@ -1,0 +1,208 @@
+# ==============================================================================
+# ONTOLOGIA HORECA - regole di dominio dichiarative (Fase 2 di implementationplan.md)
+# ==============================================================================
+# Un solo posto dove dire "cosa significa" un ingrediente generico del ricettario
+# o una parola del cliente. Le regole agiscono sugli ATTRIBUTI del catalogo_v2
+# (snack_tipo, conservazione, denocciolate, ...), non su parole cercate nei titoli.
+# Il codice che le applica e' core/ontologia.py.
+# ==============================================================================
+
+versione: 1
+
+# ------------------------------------------------------------------------------
+# Famiglie di ingredienti "da ciotolina / aperitivo"
+#   riconosci      : se il testo dello slot contiene una di queste parole
+#   escludi_testo  : ...e nessuna di queste, la famiglia si applica
+#   filtro         : condizioni sugli attributi del prodotto (default)
+#   override_query : se il CLIENTE scrive esplicitamente certe parole, il filtro cambia
+# L'ordine conta: la prima famiglia che combacia vince (le piu' specifiche prima).
+# ------------------------------------------------------------------------------
+slot_ingredienti:
+
+  olive_da_tavola:
+    inietta_da_query: true
+    descrizione: >
+      Per "olive" si intendono SOLO quelle intere in salamoia (tipo baresane/Termite di
+      Bitetto, Bella di Cerignola, Peranzana, Leccino): NON denocciolate, NON sott'olio,
+      NON condite, NON candite. Regola del cliente So Food.
+    riconosci: ["olive da tavola", "olive in salamoia", "olive verdi", "olive nere", "olive baresane", "olive"]
+    escludi_testo: ["crema di olive", "pate di olive", "patè di olive", "pasta di olive", "granella", "crostini", "tapenade", "olio"]
+    filtro:
+      snack_tipo: [olive_salamoia]
+      denocciolate: false
+    preferisci_parole: ["baresan", "bitetto", "cerignola", "peranzana", "leccino", "giganti"]
+    formato_ideale: [500, 3500]   # g: da banco/ciotolina; i secchi da 5 kg restano ultima scelta
+    # Le olive in salamoia hanno flag vegano "SI*" (dedotto) ma ingredienti solo vegetali: valgono per i vegani.
+    dieta_accetta_dedotto: true
+    override_query:
+      - parole: ["sott'olio", "sottolio", "sott olio", "in olio", "sott'oli", "sottoli", "sotto olio"]
+        filtro: {snack_tipo: [olive_olio]}
+      - parole: ["condite", "condita", "aromatizzate", "schiacciate"]
+        filtro: {snack_tipo: [olive_olio]}
+      - parole: ["denocciolat", "snocciolat", "senza nocciolo"]
+        filtro: {snack_tipo: [olive_salamoia, olive_olio], denocciolate: true}
+
+  taralli_o_grissini:
+    inietta_da_query: true
+    riconosci: ["taralli o grissini", "grissini o taralli", "taralli", "tarallini", "tarallucci"]
+    escludi_testo: []
+    filtro: {snack_tipo: [taralli, pane_croccante]}
+    override_query:
+      - parole: ["solo grissini", "grissini"]
+        filtro: {snack_tipo: [pane_croccante]}
+
+  grissini_pane_croccante:
+    inietta_da_query: true
+    riconosci: ["grissini", "pane croccante", "picos", "pane carasau", "crocchetti", "friselle", "friselline"]
+    filtro: {snack_tipo: [pane_croccante]}
+
+  frutta_secca:
+    inietta_da_query: true
+    riconosci: ["frutta secca", "anacardi", "nocciole", "arachidi", "noccioline", "mandorle", "pistacchi", "gherigli di noce"]
+    escludi_testo: ["granella", "crema", "gelato", "torta", "biscott"]
+    filtro: {snack_tipo: [frutta_secca]}
+    preferisci_parole: ["tostat", "salat", "anacard", "arachid", "noccioline"]
+    penalizza_parole: ["sgusciat", "granella", "crud"]
+
+  patatine:
+    inietta_da_query: true
+    riconosci: ["patatine", "chips", "patate chips"]
+    filtro: {snack_tipo: [patatine]}
+
+  sottoli_composizione:
+    descrizione: >
+      Prodotti che possono entrare in una composizione di sottoli/giardiniere (e che si propongono anche
+      da soli): carciofi sott'olio, melanzane, pomodori secchi... Se lo slot nomina un ortaggio specifico
+      ("carciofi sott'olio") si scelgono solo prodotti di quell'ortaggio.
+    riconosci: ["sottoli", "sott'olio", "sottolio", "sott olio", "giardiniera", "verdure grigliate", "verdure sott"]
+    escludi_testo: ["olive", "tonno", "acciughe", "alici", "pesce", "crema", "pate"]
+    filtro: {ingr_composizione_sottoli: true, reparto: DISPENSA}
+    richiedi_parole_specifiche: true
+
+  topping_finitura:
+    inietta_da_query: true
+    descrizione: >
+      Finiture da mettere sul piatto a fine preparazione (petali di tartufo, granelle, polveri, scaglie,
+      anacardi/frutta secca tritata). Qui sono ammessi anche i prodotti che sono SOLO ingredienti.
+    riconosci: ["topping", "finitura", "granella", "petali", "polvere di", "guarnizione", "a pioggia", "spolverata"]
+    preferisci_parole: ["petali", "granella", "polvere", "cristalli", "scaglie", "fiocchi", "granelli"]
+    escludi_testo: ["grana", "parmigiano", "formaggio", "cioccolato", "gelato"]
+    filtro: {ingr_topping_finitura: true}
+    ammetti_solo_ingredienti: true
+
+  aromi_spezie:
+    riconosci: ["spezie", "erbe aromatiche", "aromi", "sale aromatizzato", "mix di spezie"]
+    filtro: {ingr_aroma_spezia: true}
+    ammetti_solo_ingredienti: true
+
+  finger_food_caldo:
+    inietta_da_query: true
+    descrizione: "Surgelati da friggere/rigenerare al banco (verdure pastellate, frittelline, pettole, bocconcini)."
+    riconosci: ["finger food caldo", "finger food", "frittelline", "pastellat", "verdorate", "pettole", "fritti da banco", "frittura"]
+    filtro: {snack_tipo: [finger_food_caldo]}
+
+  snack_riso:
+    inietta_da_query: true
+    riconosci: ["snack di riso", "rise", "gallette", "riso soffiato", "rice cracker"]
+    filtro: {snack_tipo: [snack_riso]}
+
+# ------------------------------------------------------------------------------
+# Quale template del ricettario usare per una richiesta (prima di ogni ricerca vettoriale)
+#   quando     : parole nella richiesta (almeno una) E tipo di locale (almeno uno)
+#   preferiti  : id ricetta in ordine di priorita'
+# ------------------------------------------------------------------------------
+template_preferiti:
+  - nome: tris_bar
+    descrizione: >
+      Un "tris" chiesto da un bar/pub = 3 ciotoline di snack da banco (olive, taralli o
+      grissini, frutta secca, patatine, snack di riso): non salumi e formaggi.
+    quando_parole: ["tris", "aperitivo", "stuzzichini", "stuzzichino"]
+    quando_locale: ["bar", "pub", "caffetteria", "bistrot", "birreria", "american bar", "cocktail bar", "lounge bar"]
+    preferiti: [TRIS_BAR_01, TRIS_BAR_03, TRIS_BAR_04, TRIS_BAR_05]
+    non_se_parole: ["salum", "formagg", "mare", "pesce", "vegan", "caldo", "caldi", "finger", "fritt", "tagliere", "taglieri", "crudo", "carne"]
+    non_se_dieta: ["vegano", "vegetariano"]
+  - nome: tris_bar_vegano
+    quando_parole: ["tris"]
+    quando_locale: ["bar", "pub", "caffetteria", "bistrot", "birreria"]
+    quando_dieta: ["vegano", "vegetariano"]
+    preferiti: [TRIS_BAR_05, APERITIVO_TRIS_VEGETALE]
+  - nome: finger_food_caldo
+    quando_parole: ["finger food", "fingerfood", "caldi", "fritti", "rigenerare"]
+    quando_locale: ["bar", "pub", "birreria", "pizzeria"]
+    preferiti: [FINGER_FOOD_BAR_01, TRIS_BAR_02]
+
+  - nome: tris_ristorante
+    descrizione: "Tris chiesto da ristorante/enoteca: tre ciotoline classiche (salumi, formaggi, olive) o tapas."
+    quando_parole: ["tris"]
+    quando_locale: ["ristorante", "trattoria", "osteria", "enoteca", "wine bar", "hotel", "agriturismo", "pizzeria"]
+    preferiti: [APERITIVO_TRIS_CLASSICO, TRIS_SPAGNA_01, APERITIVO_TRIS_VEGETALE]
+  - nome: antipasto_sottoli
+    descrizione: "Antipasto di sottoli/giardiniera: 3 referenze sott'olio diverse; se il cliente nomina un ortaggio (carciofi) quelli salgono in testa."
+    quando_parole: ["sottoli", "sott'olio", "sottolio", "giardiniera", "sott olio"]
+    non_se_parole: ["tris", "tagliere", "olive", "pizza", "panino"]
+    preferiti: [ANTIPASTO_SOTTOLI_01]
+  - nome: tris_generico
+    descrizione: "Tris senza tipo di locale noto: si parte dal tris classico; il bot puo' chiedere il tipo di locale."
+    quando_parole: ["tris"]
+    preferiti: [APERITIVO_TRIS_CLASSICO, TRIS_BAR_01]
+
+# ------------------------------------------------------------------------------
+# Sinonimi (parole del cliente / del ricettario -> forma presente a catalogo)
+# ------------------------------------------------------------------------------
+sinonimi:
+  "mozzarella fiordilatte": "fior di latte"
+  "mozzarella fior di latte": "fior di latte"
+  "wurstel": ["würstel", "frankfurter"]
+
+# ------------------------------------------------------------------------------
+# Formati di pasta (core/formati_pasta.py): un ingrediente "spaghetti" vuole SPAGHETTI, non spaghettini o spaghettoni.
+#   forme    : come il formato compare nei nomi a catalogo (minuscolo; la piu' lunga che combacia vince)
+#   famiglia : lunga | lunga_uovo | corta | minestra | fresca_regionale | gnocchi | ripiena
+#   vicini   : formati che lo sostituiscono se manca, in ordine (proposti come ALTERNATIVA dichiarata, mai in silenzio)
+# Varianti che si scelgono SOLO se il cliente o la ricetta le nominano: speciali.
+# ------------------------------------------------------------------------------
+formati_pasta:
+  speciali: ["integral", "farro", "kamut", "tartufo", "limone", "peperone", "nero di seppia", "bio", "senza glutine", "legum"]
+  formati:
+    spaghetti:        {forme: ["spaghetti"], famiglia: lunga, vicini: [spaghettoni, linguine, spaghettini]}
+    spaghettini:      {forme: ["spaghettini", "spaghetti fini"], famiglia: lunga, vicini: [spaghetti, linguine]}
+    spaghettoni:      {forme: ["spaghettoni", "spaghettone"], famiglia: lunga, vicini: [spaghetti, bucatini]}
+    chitarra:         {forme: ["chitarra", "chitarrine", "spaghetti alla chitarra"], famiglia: lunga, vicini: [tonnarelli, spaghettoni]}
+    tonnarelli:       {forme: ["tonnarelli"], famiglia: lunga, vicini: [chitarra, spaghettoni]}
+    linguine:         {forme: ["linguine", "bavette"], famiglia: lunga, vicini: [spaghetti, spaghettini]}
+    bucatini:         {forme: ["bucatini", "perciatelli"], famiglia: lunga, vicini: [spaghettoni, ziti lunghi]}
+    fusilli lunghi:   {forme: ["fusilli lunghi"], famiglia: lunga, vicini: [bucatini, spaghettoni]}
+    candele:          {forme: ["candele lunghe", "candele"], famiglia: lunga, vicini: [ziti lunghi, bucatini]}
+    ziti lunghi:      {forme: ["ziti lunghi", "zita"], famiglia: lunga, vicini: [candele, bucatini]}
+    mafalde:          {forme: ["mafalde", "mafaldine", "reginette", "regina ruvida", "sagna riccia"], famiglia: lunga, vicini: [pappardelle, tagliatelle]}
+    scialatielli:     {forme: ["scialatielli"], famiglia: lunga, vicini: [tagliatelle, fettuccine]}
+    tagliatelle:      {forme: ["tagliatelle"], famiglia: lunga_uovo, vicini: [fettuccine, pappardelle]}
+    fettuccine:       {forme: ["fettuccine"], famiglia: lunga_uovo, vicini: [tagliatelle, pappardelle]}
+    pappardelle:      {forme: ["pappardelle"], famiglia: lunga_uovo, vicini: [tagliatelle, fettuccine]}
+    tagliolini:       {forme: ["tagliolini", "taglierini", "tajarin"], famiglia: lunga_uovo, vicini: [tagliatelle, chitarra]}
+    lasagne:          {forme: ["lasagne", "lasagna"], famiglia: lunga_uovo, vicini: []}
+    paccheri:         {forme: ["paccheri"], famiglia: corta, vicini: [mezzi paccheri, rigatoni, calamarata]}
+    mezzi paccheri:   {forme: ["mezzi paccheri"], famiglia: corta, vicini: [paccheri, calamarata, mezzi rigatoni]}
+    calamarata:       {forme: ["calamarata", "calamaretti"], famiglia: corta, vicini: [mezzi paccheri, paccheri]}
+    rigatoni:         {forme: ["rigatoni", "tortiglioni"], famiglia: corta, vicini: [mezzi rigatoni, mezze maniche, penne]}
+    mezzi rigatoni:   {forme: ["mezzi rigatoni", "mezze maniche"], famiglia: corta, vicini: [rigatoni, penne]}
+    penne:            {forme: ["penne", "pennoni", "mezze penne", "pennette", "pennine"], famiglia: corta, vicini: [sedani, rigatoni]}
+    sedani:           {forme: ["sedani", "sedanini"], famiglia: corta, vicini: [penne, mezzi rigatoni]}
+    ziti corti:       {forme: ["ziti corti", "zitoni"], famiglia: corta, vicini: [penne, candele]}
+    fusilli:          {forme: ["fusilli", "eliche", "elicoidali"], famiglia: corta, vicini: [fusilloni, caserecce]}
+    fusilloni:        {forme: ["fusilloni"], famiglia: corta, vicini: [fusilli, caserecce]}
+    caserecce:        {forme: ["caserecce", "caserecci", "strozzapreti"], famiglia: corta, vicini: [fusilli, trecce]}
+    trecce:           {forme: ["trecce", "papiri", "vesuvio"], famiglia: corta, vicini: [caserecce, fusilli]}
+    farfalle:         {forme: ["farfalle"], famiglia: corta, vicini: [fusilli]}
+    orecchiette:      {forme: ["orecchiette", "strascinati"], famiglia: corta, vicini: [cavatelli, gnocchetti sardi]}
+    cavatelli:        {forme: ["cavatelli"], famiglia: corta, vicini: [orecchiette, gnocchetti sardi]}
+    gnocchetti sardi: {forme: ["gnocchetti sardi", "malloreddus", "gnocchetti", "gnocco napoletano"], famiglia: corta, vicini: [cavatelli, orecchiette]}
+    maccheroncini:    {forme: ["maccheroncini", "maccheroni"], famiglia: corta, vicini: [penne, sedani]}
+    lumaconi:         {forme: ["lumaconi", "lumachine", "anelloni", "candele corte"], famiglia: corta, vicini: [paccheri]}
+    tubetti:          {forme: ["tubetti", "tubettoni", "ditalini"], famiglia: minestra, vicini: [pasta mista]}
+    pasta mista:      {forme: ["pasta mista", "mista corta", "mista"], famiglia: minestra, vicini: [tubetti]}
+    pastina:          {forme: ["stelline", "semini", "quadrucci", "riso di semola", "maltagliati"], famiglia: minestra, vicini: [tubetti]}
+    fregola:          {forme: ["fregola"], famiglia: corta, vicini: []}
+    pici:             {forme: ["pici"], famiglia: lunga, vicini: [spaghettoni, tonnarelli]}
+    gnocchi di patate: {forme: ["gnocchi di patate", "gnocchi"], famiglia: gnocchi, vicini: []}
+    pasta ripiena:    {forme: ["pasta ripiena", "ravioli", "tortelli", "tortellini", "agnolotti", "panciotti", "cappelletti"], famiglia: ripiena, vicini: []}

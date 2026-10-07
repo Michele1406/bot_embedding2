@@ -38,6 +38,8 @@ Uso:
 """
 
 import argparse
+
+from core import percorsi
 from pathlib import Path
 import pandas as pd
 import chromadb
@@ -69,7 +71,7 @@ def _normalizza_tassonomia(v) -> str:
     return s.upper()
 
 
-def rigenera_tassonomia(file_excel: str = "Tassonomia.xlsx", percorso_db: str = "./database_vettoriale",
+def rigenera_tassonomia(file_excel: str = percorsi.dati("Tassonomia.xlsx"), percorso_db: str = "./database_vettoriale",
                          dry_run: bool = False) -> dict:
     print("=" * 70)
     print("MIGRAZIONE TASSONOMIA ECR -> CHROMADB")
@@ -163,7 +165,7 @@ def rigenera_tassonomia(file_excel: str = "Tassonomia.xlsx", percorso_db: str = 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Applica Tassonomia.xlsx (ECR) ai metadati ChromaDB")
-    parser.add_argument("--file", default="Tassonomia.xlsx", help="Percorso del file Tassonomia.xlsx")
+    parser.add_argument("--file", default=percorsi.dati("Tassonomia.xlsx"), help="Percorso del file Tassonomia.xlsx")
     parser.add_argument("--db", default="./database_vettoriale", help="Percorso del database vettoriale")
     parser.add_argument("--dry-run", action="store_true", help="Simula senza scrivere nulla")
     args = parser.parse_args()

@@ -6,9 +6,11 @@ azienda:
   nome: "So Food"
   settore: "Distribuzione Gastronomica B2B"
   tono_di_voce: "Professionale, propositivo, rivolto a chef e ristoratori. Agisci come un consulente culinario."
+  # DA COMPILARE con i contatti reali: finche' sono vuoti Nino dice che il commerciale ricontatta il cliente
+  # (prima qui c'erano valori segnaposto, "080 1234567", che non devono mai arrivare a un cliente)
   contatti:
-    email: "ordini@sofood.it"
-    telefono: "080 1234567"
+    email: ""
+    telefono: ""
 
 catalogo:
   # Reparti esclusi a priori dal motore di composizione piatti/taglieri
@@ -63,8 +65,10 @@ regole_composizione:
 regole_dieta:
   vegano:
     # Per essere considerato vegano al 100%, il campo vegano deve essere "SI"
-    # "SI*" viene considerato a rischio (possibili tracce o derivati)
+    # "SI*" (vegano dedotto) e' accettato solo se gli ingredienti in scheda sono tutti vegetali
+    # e senza tracce di latte/uova/pesce (campo derivato vegano_ingredienti_ok, core/attributi_derivati.py)
     richiede_flag_assoluto: "SI"
+    accetta_dedotto_se_ingredienti_vegetali: true
     esclude_reparti:
       - "CARNE"
       - "CARNI"
@@ -84,6 +88,23 @@ regole_dieta:
       - "CARNI"
       - "SALUMI"
       - "MARE"
+
+  senza_glutine:
+    richiede_flag_assoluto: "SI"
+    esclude_reparti: []
+    esclude_sottocategorie:
+      - "BASI PER PIZZA E IMPASTI"
+      - "FARINE E MISCELE"
+      - "PASTA SECCA"
+      - "PASTA ALL'UOVO"
+
+  senza_lattosio:
+    richiede_flag_assoluto: "SI"
+    esclude_reparti:
+      - "FORMAGGI"
+    esclude_sottocategorie:
+      - "LATTE E BURRO"
+      - "PANNA E BESCIAMELLA"
 
 regole_territoriali:
   # Associazioni usate dal motore RAG per il boost geografico

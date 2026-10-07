@@ -1,0 +1,284 @@
+# ==============================================================================
+# FAMIGLIE E ABBINAMENTI DA TAGLIERE (studio: docs/STUDIO_ABBINAMENTI.md)
+# ==============================================================================
+# Un tagliere ben costruito alterna TEXTURE, STAGIONATURA, LATTE e INTENSITA':
+# mai due referenze della stessa famiglia (due salami, due pecorini, due crudi)
+# finche' ci sono famiglie diverse disponibili, a meno che il cliente non lo chieda.
+# Le famiglie si riconoscono da tipo_prodotto + nome del prodotto (minuscolo);
+# l'ORDINE conta: la prima famiglia che combacia vince ("culatta cotta" e' cotto, non crudo).
+# Le regole sono dati: per correggerle si modifica questo file, non il codice (core/famiglie_tagliere.py).
+
+salumi:
+  # ordine di preferenza quando si compone un tagliere di N salumi
+  ordine_preferito: [crudo, insaccato, muscolo_stagionato, cotto, manzo, grasso, spalmabile]
+  famiglie:
+    cotto: [" cott", "mortadell", "porchett", "arrosto", "roast beef", "pastrami", "coppa di testa", "zampone", "cotechino", "wurstel", "würstel"]
+    spalmabile: ["nduja", "'nduja", "spalmabil", "crema di "]
+    insaccato: ["pezzente", "salam", "finocchion", "sopress", "soppressat", "salsicc", "chorizo", "salchich", "ventricin", "ciauscol", "cacciator", "spianat", "schiacciat", "fuet"]
+    grasso: ["lardo", "pancett", "guancial", "lonzardo", "bacon"]
+    manzo: ["bresaol", "cecina", "carne salada", "carpaccio", "manzo", "puledro", "cavallo"]
+    muscolo_stagionato: ["coppiett", "coppa", "capocoll", "lonza", "lomo", "fiocco", "culatello", "filetto", "carré", "carre "]
+    crudo: ["prosciutt", "crudo", "culatta", "jamon", "jamón", "spalla", "speck", "parma", "san daniele", "iberic", "serrano"]
+
+formaggi:
+  ordine_preferito: [duro, semiduro, erborinato, molle, fresco, aromatizzato]
+  famiglie:
+    erborinato: ["erborinat", "gorgonzola", "blu ", "blu di", "roquefort", "stilton", "castelmagno"]
+    aromatizzato: [" al pistacchio", " alle noci", " al pepe", " al peperoncino", " al tartufo", " ai mirti", " al vino", " alle erbe", "aromatizzat", " ubriac"]
+    fresco: ["mozzarell", "burrat", "stracciatell", "ricott", "robiola", "stracchino", "crescenza", "spalmabil", "fresco", "primo sale", "squacquerone", "caprino fresco", "treccia", "fiordilatte", "fior di latte"]
+    molle: ["taleggio", "brie", "camembert", "crosta fiorita", "crosta lavata", "tomino", "quartirolo"]
+    duro: ["parmigian", "grana", "pecorino stagionat", "pecorino riserva", "fossa", "pasta dura", "stravecchio", "36 mesi", "24 mesi", "30 mesi", "riserva", "stagionat", "comt", "gruy", "sbrinz"]
+    semiduro: ["caciotta", "caciocavall", "provol", "pallone", "scamorz", "asiago", "fontina", "montasio", "toma", "d'alpe", "latteria", "pecorino", "caciott", "canestrato", "formaggio"]
+  # tipo di latte: si preferiscono latti diversi nello stesso tagliere (ordine: il primo che combacia)
+  latte:
+    bufalino: ["bufal"]
+    caprino: ["capra", "caprin", "caprea"]
+    ovino: ["pecor", "pecorino", "ovino", "manchego"]
+    vaccino: [""]
+
+# Tipo "base" del prodotto: due prodotti con la stessa base non stanno nello stesso tagliere
+# (due pecorini, due salami, due mortadelle) salvo richiesta esplicita del cliente.
+# Le parole generiche non contano come base (si usa la parola successiva).
+# Condimenti di dispensa: si usano IN un piatto, non si servono da soli come extra del tagliere (sottoli, ecc.).
+# Confronto sul nome del prodotto, minuscolo. ("frutti del cappero"/cucunci restano ammessi: non contengono "capperi")
+condimenti_non_da_tagliere: ["capperi", "aglio in ", "spicchi", "pesto", "trito ", "tritat", "salsa", "sugo", "paté", "patè", "crema di"]
+
+# Tratti che stancano se ripetuti nello stesso tagliere (REPORT_COLLEGAMENTI.md B4): se possibile uno solo per tratto.
+# Preferenza, non divieto: se la regione ha solo salumi affumicati si usano lo stesso. Se il cliente nomina il tratto
+# ("tagliere piccante") la regola non vale.
+tratti_da_non_ripetere:
+  piccante: ["piccant", "peperoncin", "nduja", "diavol", "hot"]
+  affumicato: ["affumicat"]
+  tartufato: ["tartuf"]
+
+basi_generiche: [formaggio, prodotto, specialita, specialità, salume, salumi, affettato, di, del, della, al, alla, filetti, filetto, baffa, trancio, tranci, cuore, vasetto]
+
+# Abbinamenti classici (gastronomia italiana): accompagnamenti da preferire per famiglia del prodotto.
+# Valori = sottocategorie del catalogo. Usati dal second brain prima degli abbinamenti statistici.
+abbinamenti_classici:
+  duro: ["CONFETTURE/SPALMABILI FRUTTA", "MOSTARDA", "MIELE"]
+  erborinato: ["MIELE", "CONFETTURE/SPALMABILI FRUTTA", "MOSTARDA"]
+  semiduro: ["CONFETTURE/SPALMABILI FRUTTA", "MOSTARDA", "SOTTOLI"]
+  molle: ["MIELE", "CONFETTURE/SPALMABILI FRUTTA"]
+  aromatizzato: ["MIELE", "CONFETTURE/SPALMABILI FRUTTA"]
+  fresco: ["SOTTOLI", "PELATI E POMODORINI"]
+  crudo: ["TARALLI", "GRISSINI", "SPECIALITA' CROCCANTI"]
+  insaccato: ["TARALLI", "SOTTOLI", "OLIVE"]
+  cotto: ["SPECIALITA' MORBIDE", "GRISSINI", "MOSTARDA"]
+  muscolo_stagionato: ["TARALLI", "SOTTOLI"]
+  manzo: ["SOTTOLI", "ALTRI CONDIMENTI"]
+  grasso: ["SPECIALITA' CROCCANTI", "SPECIALITA' MORBIDE", "MIELE", "GRISSINI"]
+
+# ==============================================================================
+# ABBINAMENTI PER TIPO (oltre al tagliere) - REPORT_COLLEGAMENTI.md punto A1
+# ==============================================================================
+# Ogni regola: "quando" riconosce il prodotto, "con" elenca gli accompagnamenti in ordine di preferenza.
+# Un selettore puo' usare: parole (nel nome o nel tipo, minuscolo), sottocategorie, snack_tipo, famiglie (da tagliere), reparti, escludi.
+#   in "quando": basta UNA tra parole/sottocategorie/snack_tipo (reparti ed escludi restano vincoli);
+#   in "con": devono valere TUTTE le chiavi indicate (es. sottocategoria liquori E parola limoncello).
+#   "tutte: true" in un "quando" chiede che valgano tutte anche li'.
+# Per ogni voce di "con" il second brain sceglie UN prodotto reale a catalogo (dieta, esclusioni, canale ok).
+# Sono scelte gastronomiche: si correggono qui, non nel codice.
+abbinamenti_per_tipo:
+  - nome: tonno e pesce conservato in olio
+    quando: {parole: ["tonno", "tonnetto", "palamita", "ventresca", "sgombro", "filetti di cernia", "filetti di dentice", "filetti di branzino", "filetti di ricciola"], reparti: [MARE, DISPENSA], escludi: ["sugo", "ragu", "ragù", "crema", "pate", "paté", "porchetta"]}
+    con:
+      - {parole: ["cipolla rossa di tropea"], escludi: ["confettur", "composta", "acqua di"]}
+      - {sottocategorie: ["SOTTOLI"]}
+      - {snack_tipo: [pane_croccante, taralli]}
+  - nome: acciughe e alici
+    quando: {parole: ["acciugh", "alici"], escludi: ["crema", "pate", "paté", "colatura"]}
+    con:
+      - {parole: ["burro salato", "burro nobile"]}
+      - {snack_tipo: [pane_croccante, taralli]}
+      - {parole: ["semi secchi", "pomodori secchi", "appassiti"]}
+  - nome: salmone affumicato
+    quando: {parole: ["salmone affumicato"], escludi: ["crema", "tartare"]}
+    con:
+      - {parole: ["burro salato", "burro nobile"]}
+      - {parole: ["cucunci", "frutti del cappero"]}
+      - {snack_tipo: [pane_croccante]}
+  - nome: bottarga e uova di pesce
+    quando: {parole: ["bottarga", "caviale", "riccio di mare", "baccal"]}
+    con:
+      - {parole: ["burro salato", "burro nobile"]}
+      - {snack_tipo: [pane_croccante]}
+      - {sottocategorie: ["OLIO EXTRAVERGINE DI OLIVA"], escludi: ["condimento", "tartufo", "aromatizzat", "spray"]}
+  - nome: affettati di mare
+    quando: {parole: ["bresaola di tonno", "soppressata di polpo", "carpaccio di", "pesce spada affumicato"], reparti: [MARE]}
+    con:
+      - {parole: ["spray evo ar. limone", "spray evo ar. arancia", "bergamotto"]}
+      - {snack_tipo: [pane_croccante]}
+  - nome: olive da aperitivo
+    quando: {snack_tipo: [olive_salamoia, olive_olio, olive_altro]}
+    con:
+      - {snack_tipo: [taralli, pane_croccante]}
+      - {snack_tipo: [frutta_secca]}
+      - {snack_tipo: [patatine]}
+  - nome: taralli, grissini e pane croccante
+    quando: {snack_tipo: [taralli, pane_croccante]}
+    con:
+      - {snack_tipo: [olive_salamoia]}
+      - {reparti: [SALUMI], parole: ["salam", "capocoll", "soppressat"]}
+      - {snack_tipo: [frutta_secca]}
+  - nome: frutta secca da aperitivo
+    quando: {snack_tipo: [frutta_secca]}
+    con:
+      - {sottocategorie: ["BIRRE ALCOLICHE"]}
+      - {snack_tipo: [olive_salamoia]}
+  - nome: fritti e patatine
+    quando: {snack_tipo: [finger_food_caldo, patatine], parole: ["pettole"]}
+    con:
+      - {sottocategorie: ["BIRRE ALCOLICHE"]}
+      - {sottocategorie: ["MAIONESE"]}
+  - nome: birre
+    quando: {sottocategorie: ["BIRRE ALCOLICHE"]}
+    con:
+      - {snack_tipo: [finger_food_caldo]}
+      - {snack_tipo: [patatine, frutta_secca]}
+      - {snack_tipo: [taralli, pane_croccante]}
+  - nome: gelato
+    quando: {parole: ["gelato gusto", "gelato "], sottocategorie: ["GELATI VASCHETTE"], escludi: ["sorbetto"]}
+    con:
+      - {sottocategorie: ["BISCOTTI TRADIZIONALI", "PASTICCERIA"]}
+      - {sottocategorie: ["CREME SPALMABILI DOLCI"]}
+      - {sottocategorie: ["FRUTTA E BABA' SOTTO SPIRITO"]}
+  - nome: sorbetto
+    quando: {parole: ["sorbetto"]}
+    con:
+      - {sottocategorie: ["ALTRI LIQUORI"], parole: ["limoncello", "mirto", "mandarinetto", "crema di limone"]}
+  - nome: baba'
+    quando: {parole: ["baba"], sottocategorie: ["FRUTTA E BABA' SOTTO SPIRITO"]}
+    con:
+      - {parole: ["vaniglia", "mascarpone", "yogurt"], sottocategorie: ["GELATI VASCHETTE"]}
+      - {sottocategorie: ["ALTRI LIQUORI"], parole: ["limoncello"]}
+  - nome: biscotti e cantucci
+    quando: {sottocategorie: ["BISCOTTI TRADIZIONALI", "PASTICCERIA"]}
+    con:
+      - {sottocategorie: ["ALTRI LIQUORI"]}
+      - {sottocategorie: ["CREME SPALMABILI DOLCI"]}
+  - nome: liquori
+    quando: {sottocategorie: ["ALTRI LIQUORI"]}
+    con:
+      - {sottocategorie: ["BISCOTTI TRADIZIONALI", "PASTICCERIA"]}
+      - {parole: ["sorbetto gusto limone", "sorbetto"]}
+  - nome: aceto balsamico
+    quando: {parole: ["balsamico", "saporoso", "perle"], sottocategorie: ["ACETO"]}
+    con:
+      - {reparti: [FORMAGGI], parole: ["parmigian", "grana"]}
+  - nome: mozzarella e paste filate fresche
+    quando: {parole: ["mozzarell", "treccia", "burrat", "fior di latte", "fiordilatte"], reparti: [FORMAGGI]}
+    con:
+      - {parole: ["semi secchi", "pomodori secchi", "appassiti", "datterini"], escludi: ["candit", "passata", "succo", "pelat"]}
+      - {sottocategorie: ["OLIO EXTRAVERGINE DI OLIVA"], escludi: ["condimento", "tartufo", "aromatizzat", "spray"]}
+  - nome: confetture, mostarde e miele
+    quando: {sottocategorie: ["CONFETTURE/SPALMABILI FRUTTA", "MOSTARDA", "MIELE"], escludi: ["cipoll", "peperon", "pomodor"]}
+    con:
+      - {famiglie: [duro]}
+      - {famiglie: [erborinato]}
+      - {famiglie: [semiduro]}
+  - nome: confetture salate (cipolla, peperone, pomodoro)
+    quando: {tutte: true, sottocategorie: ["CONFETTURE/SPALMABILI FRUTTA", "SALSE/SPALMABILI VEGETALI"], parole: ["cipoll", "peperon", "pomodor"]}
+    con:
+      - {famiglie: [semiduro, duro]}
+      - {famiglie: [cotto, insaccato]}
+  - nome: nduja e spalmabili piccanti
+    quando: {parole: ["nduja"]}
+    con:
+      - {snack_tipo: [pane_croccante, taralli]}
+      - {reparti: [FORMAGGI], parole: ["ricott", "mozzarell", "stracciatell"]}
+
+# ==============================================================================
+# COMPLEMENTARI D'USO - REPORT_COLLEGAMENTI.md punto B3
+# ==============================================================================
+# Non "cosa ci sta bene" ma "cosa serve anche per prepararlo/servirlo". Stesso formato delle regole sopra.
+  - nome: carne alla griglia
+    quando: {parole: ["fiorentina", "costata", "tomahawk", "cowboy", "rib eye", "tagliata", "picanha", "bistecca", "controfiletto", "flatiron", "lombetto"], reparti: [CARNE], escludi: ["trita", "hamburger"]}
+    con:
+      - {parole: ["preparato per grigliata", "preparato aromatico per carne", "pepe nero", "mix pepi", "rosmarino", "bacche di ginepro"], sottocategorie: ["AROMI E SPEZIE"], tutte: true}
+      - {sottocategorie: ["SALE"]}
+      - {sottocategorie: ["OLIO EXTRAVERGINE DI OLIVA"], escludi: ["condimento", "tartufo", "aromatizzat", "spray"]}
+      - {parole: ["balsamic"], sottocategorie: ["ACETO"], tutte: true}
+  - nome: bollito e cotture lente
+    quando: {parole: ["lesso", "biancostato", "brutto e buono", "lingua", "mezza testa", "punta", "guancia", "stinco"], reparti: [CARNE], escludi: ["suino"]}
+    con:
+      - {sottocategorie: ["MOSTARDA"]}
+      - {sottocategorie: ["SOTTACETI"]}
+  - nome: carne cruda e carpaccio
+    quando: {parole: ["tartare", "tartara", "da battere", "battere", "gran cruda", "crudo d'alba", "carpaccio"], reparti: [CARNE], escludi: ["marinato", "affumicato"]}
+    con:
+      - {parole: ["capperi"], escludi: ["polvere", "croccanti", "sugo", "salsa", "crema", "pesto"]}
+      - {sottocategorie: ["OLIO EXTRAVERGINE DI OLIVA"], escludi: ["condimento", "tartufo", "aromatizzat", "spray"]}
+      - {reparti: [FORMAGGI], parole: ["grana", "parmigian"]}
+      - {snack_tipo: [pane_croccante]}
+  - nome: roast beef e vitello tonnato
+    quando: {parole: ["roast beef", "girello cotto", "vitel"], reparti: [CARNE]}
+    con:
+      - {sottocategorie: ["MAIONESE"]}
+      - {parole: ["capperi"], escludi: ["polvere", "croccanti", "sugo", "salsa", "crema", "pesto"]}
+      - {parole: ["tonno"], reparti: [MARE, DISPENSA], escludi: ["sugo", "ragu", "crema", "pate", "paté"]}
+  - nome: legumi e zuppe
+    quando: {sottocategorie: ["VEGETALI SECCHI", "FAGIOLI CONSERVATI"], parole: ["ceci", "lenticchie", "fagioli", "fave", "zuppa", "minestra", "cicerchia", "roveja"], tutte: true}
+    con:
+      - {sottocategorie: ["OLIO EXTRAVERGINE DI OLIVA"], escludi: ["condimento", "tartufo", "aromatizzat", "spray"]}
+      - {parole: ["ditalini", "tubetti", "pasta mista", "maltagliati"], sottocategorie: ["PASTA DI SEMOLA"], tutte: true}
+      - {parole: ["rosmarino", "peperoncino"], sottocategorie: ["AROMI E SPEZIE"], tutte: true}
+  - nome: risotto
+    quando: {parole: ["riso"], sottocategorie: ["RISO BIANCO", "RISO PARBOILED"], tutte: true}
+    con:
+      - {parole: ["zafferano"]}
+      - {reparti: [FORMAGGI], parole: ["grana", "parmigian"]}
+  - nome: pomodoro pelato e passata
+    quando: {sottocategorie: ["PELATI E POMODORINI", "PASSATA DI POMODORO", "POLPA DI POMODORO"]}
+    con:
+      - {sottocategorie: ["PASTA DI SEMOLA"]}
+      - {sottocategorie: ["OLIO EXTRAVERGINE DI OLIVA"], escludi: ["condimento", "tartufo", "aromatizzat", "spray"]}
+      - {parole: ["origano"], sottocategorie: ["AROMI E SPEZIE"], tutte: true}
+
+complementari:
+  - nome: da friggere
+    quando: {snack_tipo: [finger_food_caldo], parole: ["pettole", "pastella"]}
+    con:
+      - {parole: ["fritturista", "olio di semi per frittura"]}
+  - nome: basi pizza e pinsa
+    quando: {sottocategorie: ["BASI PER PIZZA E IMPASTI", "SPECIALITA' MORBIDE"], parole: ["pinsa", "pizza tonda", "padellino"]}
+    con:
+      - {sottocategorie: ["PELATI E POMODORINI", "POLPA DI POMODORO", "PASSATA DI POMODORO"]}
+      - {parole: ["mozzarell", "fior di latte", "fiordilatte"], reparti: [FORMAGGI]}
+      - {sottocategorie: ["OLIO EXTRAVERGINE DI OLIVA"], escludi: ["condimento", "tartufo", "aromatizzat", "spray"]}
+  - nome: farine per pizza e pane
+    quando: {tutte: true, sottocategorie: ["FARINE E MISCELE"], parole: ["pizza", "00", "tipo 0", "tipo 1", "manitoba", "panific", "rimacinat"], escludi: ["mais", "polenta", "riso", "ceci", "legum", "dolci"]}
+    con:
+      - {sottocategorie: ["PELATI E POMODORINI", "POLPA DI POMODORO", "PASSATA DI POMODORO"]}
+      - {sottocategorie: ["OLIO EXTRAVERGINE DI OLIVA"], escludi: ["condimento", "tartufo", "aromatizzat", "spray"]}
+  - nome: pasta
+    quando: {sottocategorie: ["PASTA DI SEMOLA", "PASTA ALL'UOVO", "PASTA INT/FAR/KAMUT/LEG/MAIS"]}
+    con:
+      - {sottocategorie: ["SUGHI PRONTI E BASI"]}
+      - {reparti: [FORMAGGI], parole: ["parmigian", "grana", "pecorino"]}
+  - nome: sughi pronti
+    quando: {parole: ["sughetto", "sugo", "ragu", "ragù"], escludi: ["crostini", "pizza"]}
+    con:
+      - {sottocategorie: ["PASTA DI SEMOLA", "PASTA ALL'UOVO"]}
+  - nome: panini e hamburger
+    quando: {sottocategorie: ["PANINI", "HAMBURGER"], parole: ["hamburger", "burger"]}
+    con:
+      - {sottocategorie: ["MAIONESE"]}
+      - {parole: ["ketchup"]}
+  - nome: ragu e preparazioni di carne macinata
+    quando: {parole: ["trita", "macinat", "salsiccia", "spezzatino", "guancia"], reparti: [CARNE]}
+    con:
+      - {sottocategorie: ["PELATI E POMODORINI", "POLPA DI POMODORO", "PASSATA DI POMODORO"]}
+      - {sottocategorie: ["PASTA DI SEMOLA", "PASTA ALL'UOVO"]}
+  - nome: hamburger in panino
+    quando: {parole: ["hamburger", "hamburgherone", "burger"], reparti: [CARNE]}
+    con:
+      - {sottocategorie: ["PANINI"]}
+      - {sottocategorie: ["MAIONESE"]}
+      - {parole: ["ketchup"]}
+  - nome: carbonara e pasta all'uovo
+    quando: {parole: ["uova"], reparti: [CARNE]}
+    con:
+      - {sottocategorie: ["PASTA DI SEMOLA"]}
+      - {reparti: [FORMAGGI], parole: ["pecorino", "grana", "parmigian"]}
+      - {sottocategorie: ["FARINE E MISCELE"], parole: ["semola", "tipo 00"], tutte: true}

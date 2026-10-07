@@ -1,0 +1,116 @@
+# ==============================================================================
+# RICETTARIO - correzioni e nuove ricette (applicate da scripts/aggiorna_ricettario.py)
+# ==============================================================================
+# Il ricettario base e' Ricettario_SO_FOOD.xlsx (296 ricette) + 112 ricette presenti
+# solo nel database (non nel file Excel): il builder le esporta in
+# data/ricettario_db_only.json cosi' diventano versionabili. Questo file aggiunge
+# SOPRA a entrambi: non modifica ne' l'Excel ne' la collezione `ricette_sofood`,
+# crea la collezione `ricette_v2`.
+#
+# Regole di scrittura degli ingredienti: usare nomi generici che l'ontologia
+# (core/ontologia_horeca.yaml) sa risolvere in una famiglia di prodotti
+# ("olive da tavola", "taralli o grissini", "anacardi o nocciole", "patatine",
+# "finger food caldo"). Per le olive: SOLO in salamoia (regola del cliente).
+# ==============================================================================
+
+patch:
+  TRIS_BAR_01:
+    tag_dieta: "vegano, vegetariano"
+    note_composizione: >
+      Servire in tre ciotoline separate: una per i prodotti da forno secchi (taralli o grissini),
+      una per le olive da tavola in salamoia (tipo baresane, Cerignola) e una per la frutta secca
+      (anacardi, nocciole, arachidi).
+    stato_verifica_catalogo: verificata
+  TRIS_BAR_02:
+    ingredienti_sostituisci:
+      "frittelline calde": "finger food caldo"
+      "olive condite": "olive da tavola"
+    note_composizione: >
+      Finger food caldi fritti o rigenerati espressi serviti con birra, con taralli o grissini e
+      olive da tavola in salamoia in ciotolina.
+    stato_verifica_catalogo: verificata
+  APERITIVO_TRIS_CLASSICO:
+    canali_adatti: "wine bar, ristorante, enoteca"
+    canali_sconsigliati: "pub"
+
+nuove:
+  - id: TRIS_BAR_03
+    nome_piatto: "Tris da Bar: Olive, Patatine e Frutta Secca"
+    categoria: aperitivo
+    stile_cucina: "bar, pub, aperitivo, ciotoline"
+    tag_dieta: "vegano, vegetariano"
+    tag_protagonista: vegetale
+    canale: horeca
+    canali_adatti: "bar, pub, caffetteria, bistrot, birreria"
+    canali_sconsigliati: ristorante
+    descrizione: "Tre ciotoline da banco: olive in salamoia, patatine artigianali e frutta secca salata."
+    note_composizione: "Tre ciotoline separate, porzioni da banco. Le olive sono in salamoia, intere con nocciolo."
+    stato_verifica_catalogo: verificata
+    ingredienti:
+      - {ingrediente: "olive da tavola", categoria_attesa: Dispensa, ruolo: protagonista, note: "intere in salamoia, con nocciolo"}
+      - {ingrediente: "patatine", categoria_attesa: Dispensa, ruolo: protagonista, note: "ciotolina da banco"}
+      - {ingrediente: "anacardi o nocciole", categoria_attesa: Dispensa, ruolo: protagonista, note: "tostati e salati"}
+  - id: TRIS_BAR_04
+    nome_piatto: "Tris da Bar: Olive, Taralli e Patatine"
+    categoria: aperitivo
+    stile_cucina: "bar, pub, aperitivo, ciotoline, pugliese"
+    tag_dieta: "vegano, vegetariano"
+    tag_protagonista: vegetale
+    canale: horeca
+    canali_adatti: "bar, pub, caffetteria, bistrot, birreria"
+    canali_sconsigliati: ristorante
+    descrizione: "Tre ciotoline da banco: olive in salamoia, taralli pugliesi e patatine."
+    note_composizione: "Tre ciotoline separate: olive in salamoia, taralli o grissini, patatine."
+    stato_verifica_catalogo: verificata
+    ingredienti:
+      - {ingrediente: "olive da tavola", categoria_attesa: Dispensa, ruolo: protagonista, note: "intere in salamoia, con nocciolo"}
+      - {ingrediente: "taralli o grissini pugliesi", categoria_attesa: Dispensa, ruolo: protagonista, note: "da forno secchi"}
+      - {ingrediente: "patatine", categoria_attesa: Dispensa, ruolo: protagonista, note: "ciotolina da banco"}
+  - id: TRIS_BAR_05
+    nome_piatto: "Tris Vegetale da Bar"
+    categoria: aperitivo
+    stile_cucina: "bar, aperitivo, ciotoline, vegetale"
+    tag_dieta: "vegano, vegetariano"
+    tag_protagonista: vegetale
+    canale: horeca
+    canali_adatti: "bar, pub, caffetteria, bistrot"
+    canali_sconsigliati: ""
+    descrizione: "Tris da banco interamente vegetale: olive in salamoia, taralli o grissini, frutta secca."
+    note_composizione: "Solo prodotti con flag vegano pieno: il filtro dieta verifica ogni referenza."
+    stato_verifica_catalogo: verificata
+    ingredienti:
+      - {ingrediente: "olive da tavola", categoria_attesa: Dispensa, ruolo: protagonista, note: "intere in salamoia, con nocciolo"}
+      - {ingrediente: "taralli o grissini pugliesi", categoria_attesa: Dispensa, ruolo: protagonista, note: "da forno secchi"}
+      - {ingrediente: "anacardi o nocciole", categoria_attesa: Dispensa, ruolo: protagonista, note: "tostati e salati"}
+  - id: ANTIPASTO_SOTTOLI_01
+    nome_piatto: "Antipasto di Sottoli e Verdure Grigliate"
+    categoria: antipasto
+    stile_cucina: "mediterranea, rustica, antipasto, sottoli"
+    tag_dieta: "vegano, vegetariano"
+    tag_protagonista: vegetale
+    canale: horeca
+    canali_adatti: "ristorante, trattoria, osteria, pizzeria, bar, wine bar, enoteca"
+    canali_sconsigliati: ""
+    descrizione: "Tre referenze di verdure sott'olio e grigliate (carciofi, melanzane, pomodori secchi...) servite in piccole porzioni."
+    note_composizione: "Tre sottoli diversi, di produttori diversi quando possibile; se il cliente nomina un ortaggio, quello va per primo."
+    stato_verifica_catalogo: verificata
+    ingredienti:
+      - {ingrediente: "verdure sott'olio", categoria_attesa: Dispensa, ruolo: protagonista, note: "grigliate o sott'olio"}
+      - {ingrediente: "verdure sott'olio", categoria_attesa: Dispensa, ruolo: protagonista, note: "grigliate o sott'olio"}
+      - {ingrediente: "verdure sott'olio", categoria_attesa: Dispensa, ruolo: secondario, note: "grigliate o sott'olio"}
+  - id: FINGER_FOOD_BAR_01
+    nome_piatto: "Finger Food Caldi da Banco (da rigenerare)"
+    categoria: aperitivo
+    stile_cucina: "pub, birreria, friggitoria, finger food"
+    tag_dieta: onnivoro
+    tag_protagonista: vegetale
+    canale: horeca
+    canali_adatti: "bar, pub, birreria, pizzeria"
+    canali_sconsigliati: ristorante
+    descrizione: "Tre finger food caldi surgelati da friggere o rigenerare: verdure pastellate, frittelline, pettole."
+    note_composizione: "Prodotti surgelati in formato da banco (buste da 1 kg): friggere o rigenerare al momento."
+    stato_verifica_catalogo: verificata
+    ingredienti:
+      - {ingrediente: "finger food caldo", categoria_attesa: Gelo, ruolo: protagonista, note: "da friggere o rigenerare"}
+      - {ingrediente: "finger food caldo", categoria_attesa: Gelo, ruolo: protagonista, note: "da friggere o rigenerare"}
+      - {ingrediente: "finger food caldo", categoria_attesa: Gelo, ruolo: secondario, note: "da friggere o rigenerare"}

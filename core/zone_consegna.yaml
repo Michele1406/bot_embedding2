@@ -1,0 +1,15 @@
+# Zone coperte dai mezzi refrigerati So Food (sorgente: sofood/consegne.xlsx + regola "solo in regione: Puglia e Basilicata").
+# Il confronto e' per parole intere sulla citta'/provincia/regione scritta dal cliente (minuscolo, senza accenti).
+# Fuori da queste zone si spediscono SOLO prodotti a temperatura ambiente.
+# Citta' non riconosciuta e non esplicitamente altrove => "sconosciuta" (non si filtra: si verifica all'ordine).
+regioni_coperte: [puglia, basilicata]
+province_o_zone:
+  bari: [bari, bat, barletta, andria, trani, bisceglie, molfetta, giovinazzo, bitonto, altamura, gravina, monopoli, polignano, mola, conversano, putignano, noicattaro, rutigliano, triggiano, modugno, casamassima, capurso, valenzano, corato, ruvo, terlizzi, santeramo, gioia del colle, acquaviva, turi, castellana, noci, alberobello, locorotondo, cassano, adelfia, sammichele, toritto, binetto, bitetto, grumo]
+  foggia: [foggia, manfredonia, cerignola, san severo, lucera, vieste, peschici, mattinata, san giovanni rotondo, monte sant'angelo, bovino, orta nova, ascoli satriano, gargano, ischitella, rodi garganico, lesina, torremaggiore]
+  brindisi: [brindisi, ostuni, fasano, francavilla fontana, ceglie messapica, carovigno, mesagne, san vito dei normanni, cisternino, torre canne, oria, villa castelli, san pietro vernotico]
+  lecce: [lecce, gallipoli, otranto, nardo, galatina, maglie, casarano, taviano, tricase, leuca, santa maria di leuca, copertino, galatone, martano, salento, porto cesareo, melendugno, san cesario, surbo, trepuzzi, squinzano, cavallino, lizzanello, ugento]
+  taranto: [taranto, martina franca, grottaglie, manduria, massafra, castellaneta, ginosa, mottola, statte, pulsano, lizzano, sava, palagiano, crispiano, laterza, san giorgio ionico, leporano]
+  matera: [matera, policoro, pisticci, bernalda, metaponto, montescaglioso, ferrandina, scanzano, irsina, tricarico, grassano, miglionico, craco, nova siri, rotondella, tursi]
+  potenza: [potenza, melfi, lauria, venosa, rionero, avigliano, lagonegro, maratea, vulture, tito, pignola, villa d'agri, marsicovetere, moliterno, sant'arcangelo, senise, rapolla, lavello, genzano, acerenza, oppido lucano, picerno, brienza]
+# Localita' chiaramente fuori dalla zona coperta
+fuori_zona_esplicito: [roma, milano, torino, napoli, firenze, bologna, genova, venezia, verona, padova, palermo, catania, cagliari, sassari, trento, bolzano, perugia, ancona, pescara, aquila, campobasso, salerno, caserta, reggio calabria, cosenza, catanzaro, lombardia, piemonte, veneto, toscana, lazio, campania, calabria, sicilia, sardegna, emilia, liguria, marche, umbria, abruzzo, molise, friuli, trentino, svizzera, germania, francia, spagna]

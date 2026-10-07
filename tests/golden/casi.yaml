@@ -1,0 +1,170 @@
+# Golden set di regressione. Ogni caso gira OFFLINE sul retrieval/ricettario (nessun LLM di generazione).
+# modo: prodotti (cerca_prodotti) | ricetta (componi_proposta_da_ricettario)
+# controlli (sui prodotti restituiti):
+#   min_risultati: N
+#   dieta_ok: vegano|vegetariano|...      tutti i prodotti compatibili con la dieta
+#   vietati:   {campo: [regex,...]}       nessun prodotto con campo che combacia (campi: nome reparto sottocategoria snack_tipo tipo_prodotto modalita_uso)
+#   richiesti: {campo: [regex,...]}       almeno un prodotto (entro i primi `entro`) per OGNI regex
+#   solo:      {campo: [valori]}          tutti i prodotti hanno il campo in questi valori
+#   id_ricetta: [ids]                     (modo ricetta) la ricetta scelta e' una di queste
+#   allergie: [categorie]               nessun prodotto a rischio per queste allergie (core/allergeni.py)
+#   varieta: true                       nessun doppione di famiglia/tipo nel tagliere (core/famiglie_tagliere.py)
+casi:
+  - id: salumi_no_wurstel_no_pesce
+    query: "salumi da tagliere per ristorante"
+    modo: prodotti
+    min_risultati: 5
+    vietati: {sottocategoria: ["WURSTEL"], reparto: ["^MARE$"], nome: ["wurstel", "w[uü]rstel"]}
+
+  - id: burro
+    query: "burro per ristorante"
+    modo: prodotti
+    richiesti: {nome: ["burro"]}
+    entro: 3
+
+  - id: menu_vegano
+    query: "proposta menu vegano antipasto"
+    modo: prodotti
+    dieta: vegano
+    intento: composizione_piatto
+    min_risultati: 3
+    dieta_ok: vegano
+    vietati: {reparto: ["^SALUMI$", "^CARNE$", "^MARE$", "^FORMAGGI$"]}
+
+  - id: pasta_masciarelli_vegano
+    query: "pasta Masciarelli per ristorante vegano"
+    modo: prodotti
+    dieta: vegano
+    min_risultati: 2
+    dieta_ok: vegano
+    richiesti: {nome: ["masciarelli|pasta|rigatoni|fusilli|mista"]}
+
+  - id: legumi_valletta
+    query: "legumi La Valletta"
+    modo: prodotti
+    richiesti: {nome: ["valletta"]}
+    entro: 6
+
+  - id: senza_glutine_no_pasta_di_semola
+    query: "pasta senza glutine"
+    modo: prodotti
+    dieta: senza_glutine
+    dieta_ok: senza_glutine
+
+  - id: olive_da_tavola_salamoia
+    query: "olive da tavola per aperitivo"
+    modo: prodotti
+    tipo_locale: bar
+    vietati: {snack_tipo: ["olive_olio", "olive_altro"]}
+
+  - id: olive_sottolio_su_richiesta
+    query: "olive sott'olio"
+    modo: prodotti
+    richiesti: {snack_tipo: ["olive_olio"]}
+    entro: 5
+
+  - id: petali_tartufo_nominati
+    query: "avete i petali di tartufo?"
+    modo: prodotti
+    richiesti: {nome: ["petali"]}
+    entro: 5
+
+  - id: aperitivo_senza_solo_ingredienti
+    query: "cosa mi consigli per l'aperitivo"
+    modo: prodotti
+    tipo_locale: bar
+    vietati: {modalita_uso: ["^ingrediente$"]}
+
+  - id: esclusione_tonno
+    query: "conserve di pesce per antipasto"
+    modo: prodotti
+    esclusioni: ["tonno"]
+    vietati: {nome: ["tonno"], tipo_prodotto: ["tonno"]}
+
+  - id: tris_bar
+    query: "vorrei un tris per il mio bar"
+    modo: ricetta
+    tipo_locale: bar
+    id_ricetta: [TRIS_BAR_01, TRIS_BAR_02, TRIS_BAR_03, TRIS_BAR_04, TRIS_BAR_05, APERITIVO_TRIS_CLASSICO]
+    vietati: {snack_tipo: ["olive_olio", "olive_altro"], reparto: ["^SALUMI$", "^MARE$"]}
+
+  - id: tris_bar_vegano
+    query: "tris per aperitivo vegano"
+    modo: ricetta
+    tipo_locale: bar
+    dieta: vegano
+    dieta_ok: vegano
+    vietati: {reparto: ["^SALUMI$", "^CARNE$", "^MARE$", "^FORMAGGI$"]}
+
+  - id: finger_food_bar
+    query: "finger food caldo per il bar"
+    modo: ricetta
+    tipo_locale: bar
+    id_ricetta: [FINGER_FOOD_BAR_01]
+    richiesti: {snack_tipo: ["finger_food_caldo"]}
+    entro: 3
+
+  - id: antipasto_sottoli
+    query: "antipasto di sottoli per il ristorante"
+    modo: ricetta
+    tipo_locale: ristorante
+    min_risultati: 2
+
+  - id: tagliere_classico
+    query: "vorrei un tagliere di salumi e formaggi"
+    modo: ricetta
+    tipo_locale: ristorante
+    richiesti: {reparto: ["^SALUMI$", "^FORMAGGI$"]}
+    entro: 10
+
+  - id: tagliere_vegano_senza_carne
+    query: "tagliere vegano"
+    modo: ricetta
+    tipo_locale: ristorante
+    dieta: vegano
+    dieta_ok: vegano
+    vietati: {reparto: ["^SALUMI$", "^CARNE$", "^MARE$", "^FORMAGGI$"]}
+
+  # --- ciclo 3: regioni, varieta' del tagliere, allergie, produttori ---
+  - id: tagliere_spagnolo
+    query: "tagliere spagnolo per il mio ristorante"
+    modo: ricetta
+    tipo_locale: ristorante
+    min_risultati: 2
+    richiesti: {nome: ["ib[eé]ric|bellota|chorizo|lomo|cecina|salchich"]}
+    vietati: {nome: ["mortadella", "parma"]}
+
+  - id: tagliere_vario_3_3
+    query: "tagliere con 3 salumi e 3 formaggi"
+    modo: ricetta
+    tipo_locale: ristorante
+    min_risultati: 5
+    varieta: true
+
+  - id: degustazione_5_formaggi
+    query: "degustazione di 5 formaggi"
+    modo: ricetta
+    tipo_locale: ristorante
+    min_risultati: 4
+    varieta: true
+    vietati: {reparto: ["^SALUMI$"]}
+
+  - id: allergia_frutta_a_guscio
+    query: "snack per aperitivo al bar"
+    modo: prodotti
+    allergie: [frutta_a_guscio]
+    min_risultati: 3
+
+  - id: allergia_glutine_aperitivo
+    query: "stuzzichini per aperitivo"
+    modo: prodotti
+    allergie: [glutine]
+    min_risultati: 2
+    vietati: {nome: ["tarall", "grissin"]}
+
+  - id: produttore_italfish
+    query: "cosa avete di Italfish?"
+    modo: prodotti
+    min_risultati: 3
+    solo: {nome_fornitore: ["Italfish"]}
+    n: 4

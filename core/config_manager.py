@@ -19,8 +19,8 @@ class ConfigManager:
             with open(CONFIG_FILE_PATH, "r", encoding="utf-8") as f:
                 self._config = yaml.safe_load(f) or {}
         except Exception as e:
-            print(f"[ERRORE] Impossibile leggere {CONFIG_FILE_PATH}: {e}")
-            self._config = {}
+            print(f"[ERRORE CRITICO] Impossibile leggere {CONFIG_FILE_PATH}: {e}")
+            raise e
 
     @property
     def config(self):

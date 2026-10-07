@@ -21,6 +21,8 @@ Uso:
 """
 
 import argparse
+
+from core import percorsi
 import pandas as pd
 
 
@@ -107,7 +109,7 @@ def classifica_terra_mare(reparto: str) -> str:
 '''
 
 
-def genera(file_excel: str = "Tassonomia.xlsx", file_out: str = "tassonomia_sofood.py") -> None:
+def genera(file_excel: str = percorsi.dati("Tassonomia.xlsx"), file_out: str = "tassonomia_sofood.py") -> None:
     print(f"[1/3] Lettura '{file_excel}'...")
     df = pd.read_excel(file_excel, dtype=str)
     df["Reparto_n"] = df["Reparto"].map(_norm)
@@ -136,7 +138,7 @@ def genera(file_excel: str = "Tassonomia.xlsx", file_out: str = "tassonomia_sofo
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Rigenera tassonomia_sofood.py da Tassonomia.xlsx")
-    parser.add_argument("--file", default="Tassonomia.xlsx", help="Percorso del file Tassonomia.xlsx")
+    parser.add_argument("--file", default=percorsi.dati("Tassonomia.xlsx"), help="Percorso del file Tassonomia.xlsx")
     parser.add_argument("--out", default="tassonomia_sofood.py", help="File Python di destinazione")
     args = parser.parse_args()
     genera(args.file, args.out)

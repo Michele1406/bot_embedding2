@@ -1,4 +1,5 @@
 import os
+import sys
 from core.cart_manager import app_cart
 from core.order_extractor import estrai_ordine_da_chat
 import re
@@ -28,6 +29,27 @@ from core.retrieval_utils import (
 )
 from core.fornitori_config import FORNITORI, elenco_fornitori_per_ruolo_regione
 from core.profilazione_locale import rileva_canale_locale
+from core.testo_prodotto import prima_riga, riga_foto
+from core import guardrail_output
+from core import sessioni_store
+from core import ontologia
+from core import costruzione_tagliere, guide_prodotto, panoramica
+from core import retrieval_utils as _ru_ctx
+from core import copertura_richiesta
+from core import second_brain
+from core import logistica
+from core import audit_log
+from core import riassunto
+from core import whatsapp
+from core import sicurezza
+from core import allergeni
+from core import ordini
+from core import info_azienda
+from core import foto
+from core.anagrafica_fornitori import ANAGRAFICA, nome_breve
+from core.embedder import EmbedderGemini
+from core.errori import breve
+from core.formato_testo import pulisci_markdown, pulisci_chunk
 from dotenv import load_dotenv
 
 
@@ -44,6 +66,10 @@ class ProfiloClienteAggiornato(BaseModel):
     dieta_filtro: str | None = None
     senza_affettatrice: bool = False
     citta: str | None = None
+    esclusioni: list[str] = Field(default_factory=list, description="Prodotti/ingredienti che il cliente ha detto di NON volere (parole singole o brevi: 'tonno', 'prosciutto cotto'). Vuota se non ne ha nominati.")
+    esclusioni_rimosse: list[str] = Field(default_factory=list, description="Prodotti che il cliente aveva escluso e ORA dice di volere di nuovo ('adesso mi serve il tonno'). Vuota altrimenti.")
+    allergie: list[str] = Field(default_factory=list, description="Allergie o intolleranze dichiarate dal cliente per se' o per i suoi clienti ('frutta a guscio', 'glutine', 'latte', 'sesamo'...). Vuota se non ne ha nominate.")
+    modalita_composizione: str | None = Field(None, description="'guidata' se il cliente vuole scegliere insieme passo passo o avere opzioni tra cui scegliere; 'completa' se vuole una proposta pronta o delega ('fai tu'). None se non lo dice.")
 
 class AnalisiUnificata(BaseModel):
     tipo_richiesta: str = Field(description="'panoramica_catalogo', 'ricerca_specifica', 'composizione_piatto', 'conversazione_generica', 'chiusura_ordine'")
@@ -90,16 +116,18 @@ if not GEMINI_API_KEY:
 
 MODELLO_EMBEDDING = os.getenv("LLM_EMBEDDING", "models/gemini-embedding-2")
 MODELLO_PRINCIPALE = os.getenv("LLM_PRINCIPALE", "models/gemini-3.5-flash")
-MODELLO_FALLBACK = os.getenv("LLM_FALLBACK", "models/gemini-3.5-flash")
+# Il fallback deve essere un modello DIVERSO dal principale (con quota propria), altrimenti sul 429 si riprova lo stesso
+MODELLO_FALLBACK = os.getenv("LLM_FALLBACK", "models/gemini-3.5-flash-lite")
+MODELLO_RIASSUNTO = os.getenv("LLM_RIASSUNTO", "models/gemini-3.5-flash-lite")
 MODELLO_AUDIO = os.getenv("LLM_AUDIO", "models/gemini-2.5-flash")
 PERCORSO_DATABASE_VETTORIALE = "./database_vettoriale"
-NOME_COLLEZIONE = "catalogo_sofood"
+NOME_COLLEZIONE = os.getenv("CATALOGO_COLLECTION", "catalogo_v2")
 N_RISULTATI_RAG = 65  # Aumentato per passare più prodotti all'IA e permettere taglieri grandi
 MAX_SCAMBI_STORICO = 7
 MAX_PRODOTTI_MOSTRATI_TRACCIATI = 60  # Aumentato per gestire i 45 prodotti
 
 # Cartelle di salvataggio
-CARTELLA_LOG_CHAT = Path("./log/chat")
+CARTELLA_LOG_CHAT = Path(os.getenv("LOG_CHAT_DIR", "./log/chat"))  # i test la puntano in una cartella temporanea
 CARTELLA_LOG_CHAT.mkdir(parents=True, exist_ok=True)
 CARTELLA_AUDIO_UPLOADS = Path("./static/audio_uploads")
 CARTELLA_AUDIO_UPLOADS.mkdir(parents=True, exist_ok=True)
@@ -108,28 +136,10 @@ FREQUENZA_SALVATAGGIO_LOG = 1  # salva ogni singolo messaggio utente in tempo re
 # ====================================================================
 # CLASSE EMBEDDING
 # ====================================================================
-class EmbedderMultimodaleGemini:
-    """Calcola vettori con gemini-embedding-2 per interrogare ChromaDB."""
-    def __init__(self, api_key: str, model_name: str):
-        self.client = genai.Client(api_key=api_key)
-        self.model_name = model_name
-
-    def embed_query(self, testo: str) -> list:
-        response = self.client.models.embed_content(
-            model=self.model_name,
-            contents=[testo],
-            config=types.EmbedContentConfig(task_type="RETRIEVAL_QUERY"),
-        )
-        vettore = response.embeddings[0]
-        return vettore.values if hasattr(vettore, "values") else list(vettore)
+# Embedding delle query con cache su memoria + SQLite (core/embedder.py): la stessa query si paga una volta sola
+EmbedderMultimodaleGemini = EmbedderGemini
 
 
-def carica_memoria_dinamica():
-    """Legge le regole apprese e le aggiunge al prompt di sistema"""
-    if os.path.exists("memoria_dinamica.txt"):
-        with open("memoria_dinamica.txt", "r", encoding="utf-8") as f:
-            return "\n\nREGOLE APPRESE E LOGICHE DI ABBINAMENTO (DA RISPETTARE TASSATIVAMENTE):\n" + f.read()
-    return ""
 
 
 def trascrivi_audio(audio_bytes: bytes, mime_type: str = "audio/webm") -> str:
@@ -187,7 +197,7 @@ def trascrivi_audio(audio_bytes: bytes, mime_type: str = "audio/webm") -> str:
 client_genai = genai.Client(api_key=GEMINI_API_KEY)
 client_db = chromadb.PersistentClient(path=PERCORSO_DATABASE_VETTORIALE)
 collezione = client_db.get_collection(name=NOME_COLLEZIONE)
-NOME_COLLEZIONE_RICETTE = "ricette_sofood"
+NOME_COLLEZIONE_RICETTE = os.getenv("RICETTE_COLLECTION", "ricette_v2")
 collezione_ricette = client_db.get_collection(name=NOME_COLLEZIONE_RICETTE)
 embedder = EmbedderMultimodaleGemini(api_key=GEMINI_API_KEY, model_name=MODELLO_EMBEDDING)
 
@@ -197,14 +207,16 @@ indice_codici_prodotto = costruisci_indice_codici(collezione)
 indice_fornitori = costruisci_indice_fornitori(collezione)
 # Indice testuale per ricerca lessicale ibrida su titoli/nomi di tutti i prodotti
 indice_testuale = costruisci_indice_testuale(collezione)
+second_brain.costruisci_da_db(client_db, indice_testuale, NOME_COLLEZIONE_RICETTE)
+# Conservazione dei dati (log 30 giorni, sessioni 7, ordini mai): core/manutenzione.py
+from core.manutenzione import pulizia_retention
+pulizia_retention()
 
 # ====================================================================
 # STATO PER SESSIONE
 # ====================================================================
 sessioni = {}  # sid -> {"storico": [...], "prodotti_mostrati": set(), "prodotti_mostrati_ordinati": [], ...}
 
-
-import datetime
 
 def pulisci_sessioni_scadute():
     ora = datetime.datetime.now()
@@ -213,10 +225,19 @@ def pulisci_sessioni_scadute():
         del sessioni[s]
 
 def ottieni_sessione():
-    pulisci_sessioni_scadute()
+    """Sessione del browser (cookie Flask) -> (stato, sid)."""
     if "sid" not in session:
         session["sid"] = str(uuid.uuid4())
-    sid = session["sid"]
+    return stato_per_sid(session["sid"]), session["sid"]
+
+
+def stato_per_sid(sid: str) -> dict:
+    """Stato di conversazione per un sid qualunque (cookie del browser, numero WhatsApp...): in RAM, o ripristinato da SQLite."""
+    pulisci_sessioni_scadute()
+    if sid not in sessioni:
+        ripristinata = sessioni_store.carica(sid)  # dopo un riavvio il cliente ritrova profilo e storico
+        if ripristinata is not None:
+            sessioni[sid] = ripristinata
     if sid not in sessioni:
         sessioni[sid] = {
             "storico": [],
@@ -230,11 +251,13 @@ def ottieni_sessione():
             "citta": None,
             "ultimo_piatto_proposto": None,
             "ricette_mostrate": set(),
+            "allergie": [],
+            "esclusioni_cliente": [],
         }
     sessioni[sid].setdefault("ultimo_piatto_proposto", None)
     sessioni[sid].setdefault("ricette_mostrate", set())
     sessioni[sid]["last_active"] = datetime.datetime.now()
-    return sessioni[sid], sid
+    return sessioni[sid]
 
 
 def salva_log_chat(sid: str, stato: dict):
@@ -251,11 +274,6 @@ def salva_log_chat(sid: str, stato: dict):
 # ====================================================================
 # ROTTE FLASK
 # ====================================================================
-@app.route("/")
-def home():
-    """Carica l'interfaccia grafica HTML"""
-    return render_template_string(HTML_TEMPLATE)
-
 
 def analizza_richiesta_unificata(client_genai, user_query: str, storico_testuale: str, stato_attuale: dict) -> AnalisiUnificata:
     """Analizza la richiesta, estrae il profilo, gestisce la continuità conversazionale ed estrae gli elementi per il RAG."""
@@ -300,24 +318,44 @@ REGOLE PER IL TIPO DI RICHIESTA (tipo_richiesta):
 - Imposta 'chiusura_ordine' SE E SOLO SE l'utente conferma ESPLICITAMENTE che vuole procedere all'ordine, ad esempio fornendo la Partita IVA, dicendo "ok procediamo con l'ordine", "confermo questi", "aggiungi tutto al carrello ed emetti fattura".
 - Altrimenti usa 'panoramica_catalogo', 'ricerca_specifica', 'composizione_piatto' o 'conversazione_generica' a seconda del contesto.
 
+REGOLE PER LE ESCLUSIONI:
+- Se il cliente dice di NON volere un prodotto o ingrediente ("niente tonno", "non voglio il prosciutto cotto", "senza peperoncino"), mettilo in profilo.esclusioni (parola singola o breve). Non inserire esclusioni dedotte da te.
+- Se il cliente dice che ORA vuole di nuovo qualcosa che aveva escluso ("adesso il tonno mi serve", "va bene anche il cotto"), mettilo in profilo.esclusioni_rimosse.
+
+REGOLE PER ALLERGIE E PROFILO:
+- Allergie o intolleranze dichiarate ("sono allergico alle noci", "ho clienti celiaci", "niente lattosio per allergia") -> profilo.allergie (es. "frutta a guscio", "glutine", "latte"). Solo se dette dal cliente.
+- profilo.citta: SOLO la citta' in cui si trova il locale DEL CLIENTE, detta dal CLIENTE. Ignora le citta' citate da Nino (So Food ha sede a Bari: non e' la citta' del cliente).
+- profilo.modalita_composizione: 'guidata' se il cliente vuole scegliere insieme, avere opzioni o procedere passo passo ("aiutami a scegliere", "fammi vedere le opzioni", "costruiamolo insieme"); 'completa' se vuole una proposta pronta o delega ("fai tu", "proponimi tu un tagliere completo", "decidi tu"). None se non lo dice.
+
 REGOLE PER IL RIFERIMENTO PRECEDENTE:
 - Se il cliente dice "dimmene altri", "ancora", o "altri" senza specificare cosa, devi capire dallo STORICO a cosa si riferisce e impostare `riferimento_precedente`=true e `argomento_riferito` al dominio di cui parlavate.
 
 Rispondi rigorosamente con il JSON dello schema AnalisiUnificata.
 """
     try:
-        risposta = client_genai.models.generate_content(
-            model=MODELLO_PRINCIPALE,  # Usiamo Flash 3.6 (modello principale) per maggiore accuratezza visto che fonde 3 chiamate in 1
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.0,
-                response_mime_type="application/json",
-                response_schema=AnalisiUnificata,
-            ),
-        )
-        return AnalisiUnificata.model_validate_json(risposta.text)
+        ultimo_errore = None
+        # modello principale; su quota/servizio non disponibile il fallback (prima si passava subito alle regole e
+        # una richiesta d'ordine diventava "conversazione": Nino diceva "ho registrato" senza registrare nulla)
+        for modello_analisi in dict.fromkeys([MODELLO_PRINCIPALE, MODELLO_FALLBACK]):
+            try:
+                risposta = client_genai.models.generate_content(
+                    model=modello_analisi,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.0,
+                        response_mime_type="application/json",
+                        response_schema=AnalisiUnificata,
+                    ),
+                )
+                return AnalisiUnificata.model_validate_json(risposta.text)
+            except Exception as e_mod:
+                ultimo_errore = e_mod
+                if not any(k in str(e_mod) for k in ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE")):
+                    break
+                print(f"[ATTENZIONE] Analisi con {modello_analisi} non disponibile ({breve(e_mod)})")
+        raise ultimo_errore
     except Exception as e:
-        print(f"[ATTENZIONE] Analisi unificata fallita ({e}), fallback euristico.")
+        print(f"[ATTENZIONE] Analisi unificata fallita ({breve(e)}), fallback euristico.")
         richiede_comp = any(p in user_query.lower() for p in ["tagliere", "tris", "aperitivo", "ciotoline", "menu", "menù", "burger", "hamburger"])
         
         import re
@@ -380,14 +418,114 @@ Rispondi rigorosamente con il JSON dello schema AnalisiUnificata.
         
         if not elementi_fb:
             elementi_fb = [ElementoRichiesto(dominio="generale", quantita=None, query_ricerca=user_query)]
+        vuole_ordinare = bool(re.search(r"\b(ordinare|ordino|procediamo con l.ordine|p\.?\s?iva|partita iva)\b", q_lower)
+                              or re.search(r"\b\d{11}\b", user_query))
+        citta_fb = next((w for w in re.findall(r"[a-zà-ù']+", q_lower) if len(w) >= 4 and logistica.zona_cliente(w) != "sconosciuta"
+                         and w not in ("puglia", "basilicata")), None)
+        from core.profilazione_locale import TIPI_LOCALE_HORECA, TIPI_LOCALE_RETAIL
+        locale_fb = next((k for k in TIPI_LOCALE_HORECA + TIPI_LOCALE_RETAIL if re.search(r"\b" + re.escape(k) + r"\b", q_lower)
+                          and k not in ("cucina", "chef")), None)
+        escl_fb = [m.strip() for m in re.findall(r"\b(?:niente|senza)\s+([a-zà-ù]+(?:\s+[a-zà-ù]+)?)", q_lower)
+                   if m.split()[0] not in ("glutine", "lattosio", "problemi", "fretta", "dubbio")][:3]
         return AnalisiUnificata(
-            tipo_richiesta="conversazione_generica" if not richiede_comp else "composizione_piatto",
+            tipo_richiesta="chiusura_ordine" if vuole_ordinare else ("conversazione_generica" if not richiede_comp else "composizione_piatto"),
             richiede_composizione=richiede_comp,
             riferimento_precedente=False,
             argomento_riferito=None,
             elementi_richiesti=elementi_fb,
-            profilo=ProfiloClienteAggiornato()
+            # anche senza modello le allergie dichiarate non vanno perse (vincolo di sicurezza)
+            profilo=ProfiloClienteAggiornato(allergie=sorted(allergeni.categorie_da_testo(user_query))
+                                             if re.search(r"allergi|celiac|intolleran", user_query, re.IGNORECASE) else [],
+                                             citta=citta_fb.title() if citta_fb else None, tipo_locale=locale_fb,
+                                             esclusioni=[e.split()[0] for e in escl_fb])
         )
+
+
+def _nome_e_produttore(rec: dict) -> str:
+    meta = rec.get("metadata", {}) or {}
+    fornitore = nome_breve(meta.get("nome_fornitore", "") or "", rec.get("document", ""))
+    prima_linea = prima_riga(rec.get("document", "")) if rec.get("document") else ""
+    nome = pulisci_nome_commerciale(prima_linea, fornitore) if prima_linea else str(rec.get("id"))
+    return nome + (f" (Produttore: {fornitore})" if fornitore else "")
+
+
+def riga_formato(meta: dict, doc: str) -> str:
+    """'Formato: 1.5 kg (pezzatura HORECA)' dal parser deterministico (stessa riga del contesto prodotti)."""
+    from core.parse_formato import formato_prodotto
+    f = formato_prodotto(meta, doc)
+    if f.get("valore") is None:
+        return ""
+    g = f["valore"]
+    txt = f"{g / 1000:g} {'kg' if f['unita'] == 'g' else 'L'}" if g >= 1000 else f"{g:g} {f['unita']}"
+    return f"Formato: {txt} (pezzatura {f['canale_formato'].upper()})" + (" - peso variabile" if f.get("peso_variabile") else "")
+
+
+def aggiungi_opzioni_b(contesto_ricetta: dict, stato: dict) -> None:
+    """Per la modalita' GUIDATA (e per offrire sostituzioni in quella completa): per ogni prodotto scelto, un'opzione B
+    della stessa tipologia, verificata dal second brain con gli stessi vincoli del cliente (dieta, esclusioni,
+    allergie, zona, canale) e mai gia' presente nella proposta. Nessuna chiamata API."""
+    usati = {s["prodotto_trovato"]["id"] for s in contesto_ricetta.get("slot", []) if s.get("prodotto_trovato")}
+    cat = str(contesto_ricetta.get("template", {}).get("categoria") or "").lower()
+    # in un piatto i prodotti "solo ingrediente" (passata, trita...) sono opzioni valide; in tagliere e tris no
+    ingredienti_ok = cat not in ("tagliere", "aperitivo", "antipasto")
+    for s in contesto_ricetta.get("slot", []):
+        p = s.get("prodotto_trovato")
+        if s.get("esito") != "TROVATO" or not p:
+            continue
+        if s.get("opzione_b"):
+            usati.add(s["opzione_b"]["id"])  # proposta riusata: l'opzione B resta quella gia' mostrata
+            continue
+        alt = second_brain.BRAIN.alternative(p, 8, dieta=stato.get("filtro_dieta") or None, esclusi=usati,
+                                             canale=stato.get("canale_locale") or None, ammetti_ingredienti=ingredienti_ok)
+        nomi_proposta = {_chiave_nome(x["prodotto_trovato"]) for x in contesto_ricetta.get("slot", []) if x.get("prodotto_trovato")}
+        # stessa tipologia ma NON lo stesso prodotto con un altro codice/formato (chat reale: B della Culatta = la Culatta)
+        alt = [a for a in alt if _stessa_tipologia(p, a) and _chiave_nome(a) not in nomi_proposta and not _stesso_prodotto(p, a)]
+        if alt:
+            s["opzione_b"] = alt[0]
+            usati.add(alt[0]["id"])
+
+
+def _chiave_nome(rec: dict) -> str:
+    """Nome del prodotto senza pesi, formati e produttore: due record con la stessa chiave sono lo stesso prodotto."""
+    nome = pulisci_nome_commerciale(prima_riga(rec.get("document", "")), (rec.get("metadata") or {}).get("nome_fornitore", ""))
+    return re.sub(r"[^a-z]+", " ", nome.lower()).strip()
+
+
+def _stesso_prodotto(a: dict, b: dict) -> bool:
+    """Stesso produttore e un nome contenuto nell'altro: e' lo stesso prodotto in un'altra pezzatura
+    (chat reale: "Finocchiona IGP Gigante" con alternativa "Finocchiona IGP")."""
+    if str(a["metadata"].get("nome_fornitore") or "").lower() != str(b["metadata"].get("nome_fornitore") or "").lower():
+        return False
+    pa, pb = set(_chiave_nome(a).split()), set(_chiave_nome(b).split())
+    return bool(pa and pb) and (pa <= pb or pb <= pa)
+
+
+def _stessa_tipologia(a: dict, b: dict) -> bool:
+    """L'opzione B deve poter sostituire il prodotto: stessa famiglia da tagliere (crudo con crudo, erborinato con
+    erborinato) o, per gli altri prodotti, stessa prima parola del tipo ("spaghetti" ~ "spaghettini", "pasta")."""
+    from core import famiglie_tagliere as ft
+    fa = ft.famiglia_prodotto(a["metadata"], a.get("document", ""))
+    fb = ft.famiglia_prodotto(b["metadata"], b.get("document", ""))
+    if fa or fb:
+        return fa == fb
+    ta = str(a["metadata"].get("tipo_prodotto") or "").lower().split()
+    tb = str(b["metadata"].get("tipo_prodotto") or "").lower().split()
+    if not ta or not tb:
+        return str(a["metadata"].get("sottocategoria")) == str(b["metadata"].get("sottocategoria"))
+    return ta[0][:5] == tb[0][:5] or str(a["metadata"].get("sottocategoria")) == str(b["metadata"].get("sottocategoria"))
+
+
+def istruzioni_modalita(modalita: str) -> str:
+    """Come presentare la proposta composta (D5: Nino deve saper fare entrambe le cose)."""
+    if modalita == "guidata":
+        return ("[MODALITA' GUIDATA] Il cliente vuole scegliere: racconta in breve l'idea della proposta e, per ogni "
+                "elemento, offri le due strade con parole naturali (il prodotto indicato oppure quello IN ALTERNATIVA, es. "
+                "\"per il crudo puoi andare sul Parma di BBS oppure, se preferisci, su quello di Pellizzari\"). Se un "
+                "elemento non ha alternativa presentalo e basta. Non elencare altri prodotti. Chiudi chiedendo cosa "
+                "preferisce; quando ha scelto, riepiloga la composizione finale.")
+    return ("[MODALITA' COMPLETA] Presenta la proposta pronta, spiegando in breve perche' funziona. Se utile accenna a UNA "
+            "sola sostituzione possibile (un prodotto IN ALTERNATIVA) con parole naturali. Chiudi con una domanda breve "
+            "e concreta; puoi offrire di costruirla insieme, ma con parole tue e non sempre con la stessa formula.")
 
 
 def costruisci_contesto_ricetta_testuale(contesto_ricetta: dict) -> str:
@@ -401,30 +539,38 @@ def costruisci_contesto_ricetta_testuale(contesto_ricetta: dict) -> str:
     for s in contesto_ricetta["slot"]:
         if s.get("esito") == "TROVATO":
             doc = s["prodotto_trovato"].get("document", "")
-            prima_linea = doc.splitlines()[0] if doc else ""
             meta = s["prodotto_trovato"].get("metadata", {})
-            fornitore = meta.get("nome_fornitore", "")
-            nome_prodotto = pulisci_nome_commerciale(prima_linea, fornitore) if prima_linea else meta.get("nome_prodotto", s["prodotto_trovato"]["id"])
-            str_prod = f" (Produttore: {fornitore})" if fornitore else ""
-            righe.append(f"- {s['ingrediente_richiesto']}: {nome_prodotto}{str_prod} (MATCH REALE A CATALOGO)")
-            percorso_img = str(meta.get("percorso_immagine", "")).strip()
-            ha_img = (
-                meta.get("ha_immagine_primaria")
-                and percorso_img
-                and percorso_img.lower() not in ("", "nan", "none", "false")
-                and os.path.exists(percorso_img)
-            )
-            if ha_img:
-                righe.append(f"  Percorso File Immagine: {percorso_img}")
-            else:
-                righe.append(f"  Immagine: NESSUNA FOTO A CATALOGO (NON inserire alcun tag [IMG] per questo prodotto)")
+            righe.append(f"- {s['ingrediente_richiesto']}: {_nome_e_produttore(s['prodotto_trovato'])} (MATCH REALE A CATALOGO)")
+            from core import famiglie_tagliere as _ft
+            _fam = _ft.famiglia_prodotto(meta, doc)
+            if _fam:
+                _latte = _ft.latte(meta, doc)
+                righe.append(f"  Tipologia verificata: {'salume di muscolo intero' if _fam == 'muscolo_stagionato' else _fam.replace('_', ' ')}" + (f", latte {_latte}" if _latte else ""))
+            _f = riga_formato(meta, doc)
+            if _f:
+                righe.append(f"  {_f}")
+            for _riga_extra in ontologia.righe_extra_contesto(meta):
+                righe.append(f"  {_riga_extra}")
+            if s.get("opzione_b"):
+                righe.append(f"  IN ALTERNATIVA (stessa tipologia, verificata): {_nome_e_produttore(s['opzione_b'])}")
+            righe.append(f"  {riga_foto(meta)}")
         elif s.get("esito") == "SOSTITUITO":
             righe.append(f"- {s['ingrediente_richiesto']}: NON A CATALOGO, sostituito con {s.get('sostituto_nome', 'prodotto alternativo')}")
-            righe.append(f"  Immagine: NESSUNA FOTO A CATALOGO (NON inserire alcun tag [IMG] per questo prodotto)")
+        elif s.get("esito") == "NON_TROVATO":
+            if s.get("alternativa"):
+                righe.append(f"- {s['ingrediente_richiesto']}: NON A CATALOGO. ALTERNATIVA VERIFICATA a catalogo (presentala "
+                             f"dichiarando che e' un'alternativa): {_nome_e_produttore(s['alternativa'])}")
+                for _riga_extra in ontologia.righe_extra_contesto(s["alternativa"].get("metadata", {})):
+                    righe.append(f"  {_riga_extra}")
+            else:
+                righe.append(f"- {s['ingrediente_richiesto']}: NON A CATALOGO e nessuna alternativa verificata: dillo al cliente "
+                             "(l'ingrediente va reperito altrove), NON proporre prodotti che non sono in questo elenco")
         elif s.get("esito") == "OMESSO":
             righe.append(f"- {s['ingrediente_richiesto']}: NON A CATALOGO, nessun sostituto valido — omettere dalla proposta")
         if s.get("note_ingrediente"):
-            righe.append(f"  (nota: {s['note_ingrediente']})")
+            # nota del TEMPLATE (generica): prima il modello la attribuiva al prodotto ("Caprea di Capra: formaggio a
+            # pasta dura o semidura", chat reale)
+            righe.append(f"  (ruolo nella ricetta, NON e' una caratteristica del prodotto: {s['note_ingrediente']})")
     return "\n".join(r for r in righe if r)
 
 
@@ -526,10 +672,9 @@ def esegui_safety_net_prodotti(user_query: str, contesto_testuale: str, collezio
 
     # 1. Fornitori/brand a catalogo citati esplicitamente nella query
     if indice_fornitori:
-        for forn_chiave, id_list in indice_fornitori.items():
-            if len(forn_chiave) < 4:
-                continue
-            if re.search(r"\b" + re.escape(forn_chiave) + r"\b", query_lower) and forn_chiave not in contesto_lower:
+        # fornitori riconosciuti con gli alias calcolati dal catalogo ("masciarelli", "italfish", "la valletta"...)
+        for forn_chiave in ANAGRAFICA.fornitori_in_testo(user_query):
+            if forn_chiave in indice_fornitori and forn_chiave not in contesto_lower:
                 for r in trova_match_per_fornitore(forn_chiave, indice_fornitori, collezione, max_risultati=4):
                     if r["id"] not in id_gia_inclusi:
                         id_gia_inclusi.add(r["id"])
@@ -557,7 +702,7 @@ def esegui_safety_net_prodotti(user_query: str, contesto_testuale: str, collezio
                 )
                 esclusioni = _ESCLUSIONI_QUALITA_SAFETY.get(sc, ())
                 for r in extra:
-                    doc_p = r["document"].splitlines()[0].lower() if r.get("document") else ""
+                    doc_p = prima_riga(r["document"]).lower() if r.get("document") else ""
                     if esclusioni and any(w in doc_p for w in esclusioni):
                         continue
                     trovati_per_parola.append(r)
@@ -591,52 +736,266 @@ def esegui_safety_net_prodotti(user_query: str, contesto_testuale: str, collezio
                     id_gia_inclusi.add(r["id"])
                     prodotti_aggiuntivi.append(r)
 
+    # Gli stessi vincoli del cliente (dieta, esclusioni) valgono anche per i prodotti della safety-net
+    _dieta_c = _ru_ctx._DIETA_CORRENTE.get()
+    _prima_filtro = prodotti_aggiuntivi
+    prodotti_aggiuntivi = [
+        r for r in prodotti_aggiuntivi
+        if _ru_ctx.prodotto_compatibile_con_dieta(r["metadata"], _dieta_c)
+        and not ontologia.prodotto_escluso_da_cliente(r["metadata"], r.get("document", ""))
+    ]
+
     if not prodotti_aggiuntivi:
+        if _prima_filtro:
+            # Il produttore c'e' ma i suoi prodotti non rispettano i vincoli del cliente: non va detto "non a catalogo"
+            _forn = sorted({str(r["metadata"].get("nome_fornitore") or "") for r in _prima_filtro} - {""})
+            motivo = f"dieta {_dieta_c}" if _dieta_c else "esclusioni del cliente"
+            return contesto_testuale + (
+                f"\n\n[PRODUTTORE PRESENTE A CATALOGO: {', '.join(_forn)}] I suoi prodotti trovati NON rispettano il vincolo del cliente "
+                f"({motivo}). NON dire che il produttore non e' a catalogo: spiega che i suoi prodotti non sono adatti al vincolo e proponi un'alternativa adatta.")
         return contesto_testuale
 
     blocco_extra = "\n\n[PRODOTTI SPECIFICI RICHIESTI DALL'UTENTE — PRESENTI A CATALOGO SO FOOD (NON NEGARE LA DISPONIBILITÀ!)]\n"
     for r in prodotti_aggiuntivi:
         meta = r["metadata"]
-        prima_linea = r["document"].splitlines()[0] if r.get("document") else ""
+        prima_linea = prima_riga(r["document"]) if r.get("document") else ""
         nome_pulito = pulisci_nome_commerciale(prima_linea, meta.get("nome_fornitore", ""))
-        blocco_extra += f"- Prodotto: {nome_pulito} (Produttore: {meta.get('nome_fornitore')}, Codice: {meta.get('codice_prodotto')}, Categoria: {meta.get('categoria_prodotto')})\n"
-        percorso_img = str(meta.get("percorso_immagine", "")).strip()
-        ha_img = (
-            meta.get("ha_immagine_primaria")
-            and percorso_img
-            and percorso_img.lower() not in ("", "nan", "none", "false")
-            and os.path.exists(percorso_img)
-        )
-        if ha_img:
-            blocco_extra += f"  Percorso File Immagine: {percorso_img}\n"
-        else:
-            blocco_extra += "  Immagine: NESSUNA FOTO A CATALOGO (NON inserire alcun tag [IMG] per questo prodotto)\n"
+        blocco_extra += f"- Prodotto: {nome_pulito} (Produttore: {nome_breve(meta.get('nome_fornitore'), r.get('document', ''))}, Codice: {meta.get('codice_prodotto')}, Categoria: {meta.get('categoria_prodotto')})\n"
+        for _riga_extra in ontologia.righe_extra_contesto(meta):
+            blocco_extra += f"  {_riga_extra}\n"
+        blocco_extra += f"  {riga_foto(meta)}\n"
 
     return contesto_testuale + blocco_extra
 
 
 def elabora_messaggio_nino(user_query: str, stato: dict, sid: str) -> dict:
     """Versione sincrona che consuma il generatore stream per retrocompatibilita'."""
-    testo_completo = ""
+    testo_completo, finale = "", None
     for sse_msg in stream_messaggio_nino(user_query, stato, sid):
         if sse_msg.startswith("data: "):
             try:
-                import json
                 payload = json.loads(sse_msg[6:].strip())
-                if "chunk" in payload:
+                if "final" in payload:
+                    finale = payload["final"]  # testo gia' ripulito dai guardrail (righe non verificate tolte)
+                elif "chunk" in payload:
                     testo_completo += payload["chunk"]
                 elif "error" in payload:
-                    testo_completo += "\n\n[ERRORE DI SISTEMA]: " + payload["error"]
+                    print(f"[ERRORE] {payload['error']}")
+                    testo_completo += "\n\n" + MSG_ERRORE_CLIENTE
             except Exception as e:
                 print("Errore JSON parse in elabora_messaggio_nino:", e)
-                pass
-    return {"reply": testo_completo}
+    if finale is not None:
+        return {"reply": finale}
+    # Applica lo stesso post-processing fatto nello storico per pulire il testo finale
+    tc = testo_completo
+    tc = pulisci_markdown(tc)  # core/formato_testo.py
+    return {"reply": tc}
+
+MSG_ERRORE_CLIENTE = "Mi scuso, ho avuto un problema tecnico nel rispondere. Puoi riscrivermi la richiesta tra qualche istante?"
+
+
+def sse_chunk(testo: str) -> str:
+    """Un evento SSE con un blocco di testo."""
+    return "data: " + json.dumps({"chunk": testo}) + "\n\n"
+
+
+def _messaggio_fisso(stato: dict, sid: str, testo: str, etichetta: str):
+    """Risposta deterministica (ordini, conferme...): va nello storico e nella sessione come quelle del modello,
+    cosi' al turno dopo il modello sa che cosa Nino ha chiesto (prima la domanda sulla P.IVA spariva)."""
+    stato["storico"].append(types.Content(role="model", parts=[types.Part.from_text(text=testo)]))
+    stato["log_chat"].append({"ruolo": "nino", "testo": testo, "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+    stato["contatore_messaggi"] = stato.get("contatore_messaggi", 0) + 1
+    salva_log_chat(sid, stato)
+    sessioni_store.salva(sid, stato)
+    audit_log.nota("risposta_fissa", etichetta)
+    audit_log.chiudi(stato, testo)
+    yield sse_chunk(testo)
+    yield 'data: {"final": ' + json.dumps(testo) + '}\n\n'
+    yield 'data: {"done": true}\n\n'
+
+
+def _conversazione_per_ordine(stato: dict) -> list:
+    return [{"ruolo": r.get("ruolo"), "testo": r.get("testo"), "ora": r.get("timestamp")} for r in stato.get("log_chat", [])]
+
+
+def _imposta_vincoli_turno(stato: dict) -> None:
+    """Tutti i vincoli del cliente valgono per OGNI ricerca del turno. Si impostano all'inizio e sempre: con un
+    server a thread riusati un ramo anticipato non deve leggere i valori del turno (o del cliente) precedente."""
+    ontologia.ESCLUSIONI_CORRENTI.set(list(stato.get("esclusioni_cliente") or []))
+    allergeni.ALLERGIE_CORRENTI.set(list(stato.get("allergie") or []))
+    logistica.ZONA_CORRENTE.set(stato.get("zona_consegna"))
+    _ru_ctx._DIETA_CORRENTE.set(stato.get("filtro_dieta"))
+    _ru_ctx._CANALE_CORRENTE.set(stato.get("canale_locale"))
+    _ru_ctx._QUERY_ORIGINALE.set(None)
+
+
+def _aggiorna_profilo(stato: dict, profilo) -> None:
+    if profilo.tipo_locale:
+        stato["tipo_locale"] = profilo.tipo_locale.lower()
+    if profilo.stile_cucina:
+        stato["stile_cucina"] = profilo.stile_cucina.lower()
+    if profilo.dieta_filtro:
+        dieta_raw = profilo.dieta_filtro.lower()
+        if "vegan" in dieta_raw:
+            stato["filtro_dieta"] = "vegano"
+        elif "vegetariano" in dieta_raw or "vegetariana" in dieta_raw:
+            stato["filtro_dieta"] = "vegetariano"
+        elif "glutin" in dieta_raw or "celiac" in dieta_raw:
+            stato["filtro_dieta"] = "senza_glutine"
+        elif "lattosi" in dieta_raw:
+            stato["filtro_dieta"] = "senza_lattosio"
+        else:
+            stato["filtro_dieta"] = None
+    if profilo.senza_affettatrice:
+        stato["senza_affettatrice"] = True
+    if profilo.citta:
+        stato["citta"] = profilo.citta
+    # Esclusioni del cliente: persistono per tutta la sessione e valgono per ogni ricerca (core/ontologia.py);
+    # si tolgono solo se il cliente dice che ora le vuole di nuovo
+    escl_cliente = stato.setdefault("esclusioni_cliente", [])
+    rimosse = {str(x).strip().lower() for x in (getattr(profilo, "esclusioni_rimosse", None) or []) if str(x).strip()}
+    if rimosse:
+        stato["esclusioni_cliente"] = escl_cliente = [e for e in escl_cliente
+                                                       if not any(r in e or e in r for r in rimosse)]
+    for _e in getattr(profilo, "esclusioni", None) or []:
+        _e = str(_e).strip().lower()
+        if _e and _e not in escl_cliente and _e not in rimosse and len(escl_cliente) < 20:
+            escl_cliente.append(_e)
+    # Allergie: categorie dei 14 allergeni UE (core/allergeni.py), vincolo permanente
+    nuove = set()
+    for a in getattr(profilo, "allergie", None) or []:
+        nuove |= allergeni.categorie_da_testo(str(a))
+    if nuove:
+        stato["allergie"] = sorted(set(stato.get("allergie") or []) | nuove)
+    mod = (getattr(profilo, "modalita_composizione", None) or "").strip().lower()
+    if mod in ("guidata", "completa"):
+        stato["modalita_composizione"] = mod
+    stato["zona_consegna"] = logistica.zona_cliente(stato.get("citta"))
+
+
+_RE_GUIDATA = re.compile(r"\b(scegliamo insieme|costruiamolo insieme|aiutami a scegliere|passo passo|fammi scegliere|"
+                         r"dammi (delle |qualche )?opzioni|che opzioni|quali opzioni|voglio scegliere io)\b", re.IGNORECASE)
+_RE_COMPLETA = re.compile(r"\b(fai tu|decidi tu|scegli tu|fammi tu|proposta completa|proponimi tu|componi tu|"
+                          r"pensaci tu|vai tu)\b", re.IGNORECASE)
+
+
+def modalita_composizione(user_query: str, stato: dict) -> str:
+    """'guidata' (opzioni A/B per componente, il cliente sceglie) o 'completa' (proposta pronta, sostituzioni su richiesta).
+    Le parole esplicite del messaggio vincono; poi la preferenza memorizzata; di default 'completa'."""
+    if _RE_COMPLETA.search(user_query or ""):
+        stato["modalita_composizione"] = "completa"
+    elif _RE_GUIDATA.search(user_query or ""):
+        stato["modalita_composizione"] = "guidata"
+    return stato.get("modalita_composizione") or "completa"
+
+
+# Parole che indicano una portata/composizione: se il messaggio ne nomina una DIVERSA dalla proposta attiva,
+# e' una richiesta nuova, non la gestione di quella attiva
+_PORTATE_PAROLE = {
+    "aperitivo": ("tris", "aperitivo", "stuzzichini", "ciotoline"), "tagliere": ("tagliere", "taglieri"),
+    "primo": ("primo", "pasta", "spaghetti", "risotto"), "secondo": ("secondo", "carne", "pesce al forno"),
+    "pizza": ("pizza", "pinsa", "focaccia"), "panino": ("panino", "burger", "hamburger"),
+    "dolce": ("dolce", "dessert"), "antipasto": ("antipasto", "antipasti"), "contorno": ("contorno",),
+    "menu": ("menu", "menù"),
+}
+_RE_GESTIONE_PROPOSTA = re.compile(
+    r"\b(sostitu\w*|cambia\w*|metti|mettimi|togli\w*|al posto|opzione b|opzioni|scelgo|preferisco|vada per|prendo|"
+    r"intendevo|intendo|lo stesso|la stessa|facciamol[oa]|costruiamol[oa]|insieme|passo passo)\b",
+    re.IGNORECASE)
+
+
+# radici (5 lettere) di parole che servono a riferirsi a un prodotto, non a nominarlo
+_PAROLE_ANAFORA = {w[:5] for w in ("vedere", "questa", "questo", "queste", "questi", "quella", "quello", "quelle", "quelli",
+                                   "parli", "immagine", "foto", "fammi", "fammelo", "mostrami", "prodotto", "dello", "della",
+                                   "detto", "proposto", "consigliato", "citato", "anche", "ancora", "come", "fatto",
+                                   "aspetto", "sicuro", "conosco", "capito", "dimmi", "parlami", "info", "informazioni")}
+
+
+def messaggio_su_proposta_attiva(testo: str, piatto: dict) -> bool:
+    """True se il messaggio lavora sulla proposta appena fatta (cambio di modalita', sostituzioni, scelte,
+    riferimenti) e non chiede una portata diversa. Regola generale, non legata a un piatto."""
+    t = (testo or "").lower()
+    if not (_RE_GESTIONE_PROPOSTA.search(t) or _RE_GUIDATA.search(t) or _RE_COMPLETA.search(t)):
+        return False
+    cat = str(piatto.get("categoria") or "").lower()
+    nome = str(piatto.get("nome_piatto") or "").lower()
+    mie = set(_PORTATE_PAROLE.get(cat, ())) | {w for ws in _PORTATE_PAROLE.values() for w in ws if w in nome}
+    altre = {w for c, ws in _PORTATE_PAROLE.items() if c != cat for w in ws} - mie
+    return not any(re.search(r"\b" + re.escape(w) + r"\b", t) for w in altre)
+
+
+def ricostruisci_proposta(piatto: dict) -> "dict | None":
+    """Proposta attiva ricostruita dagli id salvati in sessione (stessi prodotti, opzioni B e alternative)."""
+    per_id = {p["id"]: p for p in indice_testuale}
+    slot = []
+    for s in piatto.get("slot") or []:
+        rec = {k: s.get(k) for k in ("ingrediente_richiesto", "esito", "ruolo", "note_ingrediente")}
+        for campo, chiave in (("prodotto_trovato", "prodotto_id"), ("opzione_b", "opzione_b_id"), ("alternativa", "alternativa_id")):
+            if s.get(chiave) in per_id:
+                rec[campo] = per_id[s[chiave]]
+        if rec.get("esito") == "TROVATO" and not rec.get("prodotto_trovato"):
+            rec["esito"] = "NON_TROVATO"  # prodotto uscito dal catalogo nel frattempo
+        slot.append(rec)
+    if not slot:
+        return None
+    return {"template": {"id_ricetta": piatto.get("id_ricetta"), "nome_piatto": piatto.get("nome_piatto"),
+                         "categoria": piatto.get("categoria"), "note_composizione": piatto.get("note_composizione", "")},
+            "slot": slot}
+
 
 def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
     """Esegue l'elaborazione RAG e la generazione della risposta di Nino."""
+    user_query = sicurezza.pulisci_input(user_query)   # niente caratteri di controllo, max 2000 caratteri
+    injection = sicurezza.tentativo_injection(user_query)
     user_query_clean = re.sub(r'\b(hamburge|hamburgher|amburgher)\b', 'hamburger', user_query, flags=re.IGNORECASE)
     user_query_clean = re.sub(r'\b(kechup|chechup)\b', 'ketchup', user_query_clean, flags=re.IGNORECASE)
     testo_per_ricerca = user_query_clean
+    audit_log.inizia(sid, user_query)
+    _imposta_vincoli_turno(stato)
+    if injection:
+        print("[SICUREZZA] possibile tentativo di injection nel messaggio")
+        audit_log.nota("injection", True)
+
+    # [FIX CRITICO 1]: Aggiungiamo subito il messaggio utente allo storico.
+    # Altrimenti, se il flusso si interrompe prima (es. checkout), l'ultimo messaggio (es. P.IVA) va perso.
+    stato["storico"].append(types.Content(role="user", parts=[types.Part.from_text(text=user_query)]))
+    timestamp_ora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    stato["log_chat"].append({"ruolo": "utente", "testo": user_query, "timestamp": timestamp_ora})
+
+    # ORDINE IN ATTESA DI CONFERMA: "CONFERMO" / "annulla" si gestiscono senza chiamate al modello
+    bozza = stato.get("ordine_in_attesa")
+    if bozza and ordini.e_conferma(user_query):
+        ok, msg, id_ordine = ordini.registra(bozza, stato, sid, _conversazione_per_ordine(stato))
+        if ok:
+            stato["ordine_in_attesa"] = None
+        audit_log.nota("ordine", {"registrato": ok, "id": id_ordine, "righe": len(bozza.get("righe", []))})
+        yield from _messaggio_fisso(stato, sid, msg + ("\nPosso aiutarti con altro?" if ok else ""), "ordine_confermato")
+        return
+    if bozza and ordini.e_annullamento(user_query):
+        stato["ordine_in_attesa"] = None
+        yield from _messaggio_fisso(stato, sid, "Ok, ordine annullato: non e' stato inviato nulla. Posso aiutarti con altro?",
+                                    "ordine_annullato")
+        return
+
+    # COSTRUZIONE DEL TAGLIERE INSIEME, passo passo (core/costruzione_tagliere.py): "non mi convince" -> quanti salumi e
+    # formaggi -> rosa numerata -> il cliente sceglie -> altre proposte fino al numero -> riepilogo. Domande e liste sono
+    # testi fissi (nessuna chiamata API, numeri esatti); solo il riepilogo finale passa dal modello.
+    turno_costruzione = None
+    try:
+        turno_costruzione = costruzione_tagliere.turno(stato, user_query, indice_testuale, stato.get("ultimo_piatto_proposto"))
+    except Exception as _e_ct:
+        print(f"[COSTRUZIONE] errore (ignorato): {breve(_e_ct)}")
+        stato["costruzione"] = None
+    if turno_costruzione and turno_costruzione.get("testo_fisso"):
+        if turno_costruzione["prodotti"]:
+            stato["prodotti_in_focus"] = [p["id"] for p in turno_costruzione["prodotti"]]
+            for _p in turno_costruzione["prodotti"]:
+                if _p["id"] not in stato["prodotti_mostrati_ordinati"]:
+                    stato["prodotti_mostrati_ordinati"].append(_p["id"])
+            stato["prodotti_mostrati"] = set(stato["prodotti_mostrati_ordinati"])
+        audit_log.nota("costruzione_tagliere", turno_costruzione["fase"])
+        yield from _messaggio_fisso(stato, sid, turno_costruzione["testo_fisso"], "costruzione_" + turno_costruzione["fase"])
+        return
 
     # 1. RISCRITTURA QUERY CON CONTESTO COMPLETO DELLA CONVERSAZIONE
     scambi_recenti = []
@@ -653,59 +1012,36 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
     # ANALISI SEMANTICA UNIFICATA (Intent, Profile, RAG Elements)
     yield 'data: {"status": "Analizzo la richiesta..."}\n\n'
     analisi = analizza_richiesta_unificata(client_genai, user_query_clean, contesto_conversazione, stato)
+    _aggiorna_profilo(stato, analisi.profilo)
+    _imposta_vincoli_turno(stato)
 
-    # GESTIONE CHECKOUT / CHIUSURA ORDINE
-    if analisi.tipo_richiesta == "chiusura_ordine":
-        print(f"[CHECKOUT] Rilevata chiusura ordine per sessione {sid}")
-        
-        # Inizializza il carrello (assumiamo tenant 'so_food' di default per il webhook test)
-        from core.config_manager import get_azienda_info
-        tenant_name = get_azienda_info().get("nome", "azienda_ignota")
-        app_cart.init_cart(sid, tenant_name)
-        
-        # Estrai l'ordine dalla cronologia
-        ordine_estratto = estrai_ordine_da_chat(client_genai, stato["storico"], MODELLO_FALLBACK)
-        
-        if ordine_estratto.prodotti:
-            dati_cliente = {}
-            if ordine_estratto.ragione_sociale: dati_cliente["ragione_sociale"] = ordine_estratto.ragione_sociale
-            if ordine_estratto.partita_iva: dati_cliente["partita_iva"] = ordine_estratto.partita_iva
-            
-            app_cart.update_cart(sid, [p.model_dump() for p in ordine_estratto.prodotti], dati_cliente)
-            successo, payload = app_cart.inoltra_ordine_erp(sid)
-            
-            if successo:
-                stato["storico"].append(types.Content(role="model", parts=[types.Part.from_text(text="Ordine inviato al gestionale. Preparo la conferma per il cliente.")]))
-                yield 'data: {"chunk": "\n\nOrdine inoltrato con successo al gestionale! Hai bisogno di altro?"}\n\n'
-                yield 'data: {"done": true}\n\n'
-                return
-
-
+    # ORDINE: estrazione dalla chat -> validazione -> RIEPILOGO da confermare (mai inviato senza "CONFERMO")
+    if not turno_costruzione and analisi.tipo_richiesta == "chiusura_ordine" or (bozza and re.search(r"\bordin|\bp\.?\s?iva|partita iva", user_query, re.IGNORECASE)):
+        print(f"[CHECKOUT] preparazione ordine per sessione {sid}")
+        ordine_estratto = estrai_ordine_da_chat(client_genai, stato["storico"], MODELLO_FALLBACK, stato.get("riassunto", ""))
+        nuova, messaggio = ordini.prepara(ordine_estratto, indice_testuale, stato)
+        stato["ordine_in_attesa"] = nuova
+        audit_log.nota("ordine", {"bozza": bool(nuova), "righe": len(nuova["righe"]) if nuova else 0})
+        yield from _messaggio_fisso(stato, sid, messaggio, "ordine_riepilogo" if nuova else "ordine_dati_mancanti")
+        return
+    if bozza:
+        # il cliente ha cambiato discorso: la bozza resta, ma glielo si ricorda nel profilo
+        audit_log.nota("ordine_in_attesa", True)
 
     # Continuità conversazionale: se l'utente chiede "dimmene altri", recuperiamo l'argomento precedente
     if analisi.riferimento_precedente and analisi.argomento_riferito:
         ha_nuovi = any(e.dominio.lower() != "generale" for e in analisi.elementi_richiesti)
         if not ha_nuovi:
-            
+
             analisi.elementi_richiesti = [ElementoRichiesto(
                 dominio=analisi.argomento_riferito,
                 quantita=None,
                 query_ricerca=analisi.argomento_riferito
             )]
-            
+
     # Estrai la query di ricerca combinata per il fallback / checks testuali storici
     queries = [e.query_ricerca for e in analisi.elementi_richiesti if e.query_ricerca]
     testo_per_ricerca = " ".join(queries) if queries else user_query_clean
-    if analisi.profilo.tipo_locale:
-        stato["tipo_locale"] = analisi.profilo.tipo_locale.lower()
-    if analisi.profilo.stile_cucina:
-        stato["stile_cucina"] = analisi.profilo.stile_cucina.lower()
-    if analisi.profilo.dieta_filtro:
-        stato["filtro_dieta"] = analisi.profilo.dieta_filtro.lower()
-    if analisi.profilo.senza_affettatrice:
-        stato["senza_affettatrice"] = True
-    if analisi.profilo.citta:
-        stato["citta"] = analisi.profilo.citta
 
     query_bassa_combinata = f"{user_query_clean} {testo_per_ricerca}".lower()
 
@@ -721,19 +1057,25 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
     # È un BOOST di ordinamento nella ricerca, mai un'esclusione: se per un
     # prodotto esiste solo un formato, resta comunque proponibile a chiunque.
     stato["canale_locale"] = rileva_canale_locale(stato.get("tipo_locale"))
+    # Dieta e canale del cliente valgono per OGNI ricerca del turno (anche safety-net e fallback), non solo
+    # per la composizione del ricettario: E2E reale, un cliente vegano riceveva carciofi surgelati e petali di
+    # tartufo non vegani da una ricerca che non applicava il filtro dieta.
+    _ru_ctx._DIETA_CORRENTE.set(stato.get("filtro_dieta"))
+    _ru_ctx._CANALE_CORRENTE.set(stato.get("canale_locale"))
 
     print(f"[DEBUG PROFILO] Tipo Locale: {stato.get('tipo_locale')} | Canale: {stato.get('canale_locale')} | Stile: {stato.get('stile_cucina')} | Dieta: {stato.get('filtro_dieta')} | No Affettatrice: {stato.get('senza_affettatrice')} | Città: {stato.get('citta')}")
     print(f"[DEBUG INTENT] Richiede Composizione: {analisi.richiede_composizione} ({analisi.tipo_richiesta})")
+    audit_log.nota("intento", {"tipo": analisi.tipo_richiesta, "composizione": bool(analisi.richiede_composizione)})
 
     stato.setdefault("ultimo_piatto_proposto", None)
     stato.setdefault("ricette_mostrate", set())
 
-    # Riconoscimento se la query contiene parole di nuova richiesta o congiunzioni che introducono una variante/nuovo piatto
+    # Riconoscimento se la query contiene parole forti di nuova richiesta o variante
     ha_parole_nuova_richiesta = any(k in query_bassa_combinata for k in [
-        " e ", ", e ", " ma ", ", ma ", "però", "pero ", " invece", "vorrei", "fammi", "fammene", "proponimi",
-        "dimmi", "passiamo", "più semplice", "piu semplice", "meno elaborato", "un altro", "un'altra",
-        "altra proposta", "un panino", "un burger", "un primo", "un secondo", "un piatto", "uno con", "una con",
-        "fammene una", "fammene uno", "e uno", "e una", "pasta", "secondo", "tagliere", "tapas", "pizza", "dessert", "dolce", "birra", "vino", "senza "
+        "vorrei", "fammi", "fammene", "proponimi",
+        "passiamo a", "un altro", "un'altra",
+        "altra proposta", "un panino", "un burger", "un primo piatto", "un secondo piatto", "un piatto", "uno con", "una con",
+        "fammene una", "fammene uno"
     ])
 
     ha_parole_tecniche_formati = any(k in query_bassa_combinata for k in [
@@ -770,9 +1112,63 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
         usa_ricettario = True
     else:
         usa_ricettario = analisi.richiede_composizione
+    # "e del finger food?", "che olive avete?": una famiglia di prodotto nominata senza una portata e' una ricerca di
+    # prodotti, non un nuovo piatto (chat reale: diventava un tagliere con giardiniera e nessun finger food)
+    if usa_ricettario and ontologia.spec_da_query(user_query_clean) and not any(
+            re.search(r"\b" + re.escape(w) + r"\b", user_query_clean.lower()) for ps in _PORTATE_PAROLE.values() for w in ps):
+        usa_ricettario = False
 
     contesto_ricetta = None
     ids_da_tracciare = []
+
+    if turno_costruzione:
+        usa_ricettario = False
+        chiede_dettagli_formati_correnti = False
+        audit_log.nota("costruzione_tagliere", turno_costruzione["fase"])
+        print(f"[COSTRUZIONE] fase: {turno_costruzione['fase']}")
+
+    # Messaggi che GESTISCONO la proposta attiva ("facciamolo insieme", "metti l'opzione B", "no intendo il tris"):
+    # si riusa la proposta salvata invece di cercarne una nuova (chat reale: "facciamolo insieme" dopo un tris
+    # produceva tagliatelle al ragu')
+    proposta_riusata = False
+    if (not turno_costruzione and ultimo_piatto and ultimo_piatto.get("slot")
+            and messaggio_su_proposta_attiva(user_query_clean, ultimo_piatto)):
+        contesto_ricetta = ricostruisci_proposta(ultimo_piatto)
+        proposta_riusata = contesto_ricetta is not None
+        if proposta_riusata:
+            usa_ricettario = False
+            chiede_dettagli_formati_correnti = False
+            print(f"[DEBUG STATO] Riuso della proposta attiva: '{ultimo_piatto.get('nome_piatto')}'")
+
+    # Domande sui prodotti appena citati ("mi fai vedere questa pancetta", "hai un'immagine?", "cos'e'?"): il contesto
+    # sono QUEI prodotti, non una nuova ricerca (chat reale: "hai un'immagine?" faceva cercare "immagine" e Nino
+    # proponeva un altro prodotto)
+    turno_su_prodotti_in_focus = False
+    focus_scelti = []
+    # domanda su una delle proposte numerate della costruzione ("com'e' il terzo?")
+    _nominati_lista = costruzione_tagliere.nominati(stato, user_query_clean, indice_testuale) if not turno_costruzione else []
+    if _nominati_lista:
+        focus_scelti = _nominati_lista
+        turno_su_prodotti_in_focus = True
+        usa_ricettario = False
+        chiede_dettagli_formati_correnti = False
+    elif (not proposta_riusata and not turno_costruzione and stato.get("prodotti_in_focus") and foto.anaforico(user_query_clean)
+            and not chiede_alternativa_o_nuovo_piatto):
+        per_id_focus = {p["id"]: p for p in indice_testuale}
+        focus = [per_id_focus[i] for i in stato["prodotti_in_focus"] if i in per_id_focus]
+        parole_q = {w[:5] for w in re.findall(r"[a-zàèéìòù]+", user_query_clean.lower()) if len(w) >= 4}
+        nominati = [p for p in focus if parole_q & {w[:5] for w in re.findall(r"[a-zàèéìòù]+", prima_riga(p["document"]).lower()) if len(w) >= 4}]
+        parole_contenuto = parole_q - _PAROLE_ANAFORA
+        if nominati:
+            focus_scelti = nominati
+        elif not parole_contenuto:
+            focus_scelti = focus[:1]  # "hai un'immagine?": l'ultimo prodotto di cui si e' parlato
+        else:
+            focus_scelti = []  # nomina un prodotto che non era in primo piano: ricerca normale (chat reale: pancetta -> Parma)
+        if focus_scelti:
+            turno_su_prodotti_in_focus = True
+            usa_ricettario = False
+            chiede_dettagli_formati_correnti = False
 
     if usa_ricettario:
         try:
@@ -805,7 +1201,9 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
                     "tagliere": {"tagliere", "taglieri"},
                     "dolce": {"dolce", "dolci", "dessert"},
                     "contorno": {"contorno", "contorni"},
-                    "antipasto": {"antipasto", "antipasti"}
+                    "antipasto": {"antipasto", "antipasti"},
+                    # senza questa voce "fammi un tris" dopo un tagliere ereditava la categoria tagliere (chat reale)
+                    "aperitivo": {"tris", "aperitivo", "aperitivi", "stuzzichini", "ciotoline"},
                 }
 
                 famiglia_corrente = cat_prec
@@ -842,25 +1240,67 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
     if contesto_ricetta:
         tmpl = contesto_ricetta["template"]
         print(f"[DEBUG RICETTARIO] Proposta trovata: {tmpl['nome_piatto']}")
-        contesto_testuale = costruisci_contesto_ricetta_testuale(contesto_ricetta)
+        modalita = modalita_composizione(user_query, stato)
+        aggiungi_opzioni_b(contesto_ricetta, stato)
+        audit_log.nota("ricetta", {"id": tmpl.get("id_ricetta") or tmpl.get("id"), "nome": tmpl.get("nome_piatto"),
+                                   "modalita": modalita, "riusata": proposta_riusata,
+                                   "slot": [(s.get("ingrediente_richiesto"), s.get("esito")) for s in contesto_ricetta.get("slot", [])]})
+        contesto_testuale = costruisci_contesto_ricetta_testuale(contesto_ricetta) + "\n" + istruzioni_modalita(modalita)
+        # Piu' portate chieste ("un primo di mare, poi tutto il menu"): se ne compone una per turno; va detto, non
+        # ignorato (chat reale)
+        _portate_chieste = {c for c, ws in _PORTATE_PAROLE.items()
+                            if any(re.search(r"\b" + re.escape(w) + r"\b", user_query_clean.lower()) for w in ws)}
+        if not proposta_riusata and ("menu" in _portate_chieste or len(_portate_chieste) >= 2):
+            contesto_testuale += (f"\n[RICHIESTA DI PIU' PORTATE: qui e' composta solo la portata '{tmpl.get('categoria')}'. "
+                                  "Presentala, poi di' chiaramente che puoi comporre anche le altre portate del menu e "
+                                  "chiedi da quale continuare (antipasto, secondo, dolce...).]")
+            audit_log.nota("piu_portate", sorted(_portate_chieste))
         record_prodotti = []
         for s in contesto_ricetta.get("slot", []):
             if s.get("esito") == "TROVATO" and s.get("prodotto_trovato"):
                 ids_da_tracciare.append(s["prodotto_trovato"]["id"])
                 record_prodotti.append(s["prodotto_trovato"])
-            elif s.get("esito") == "SOSTITUITO" and s.get("sostituto_id"):
-                ids_da_tracciare.append(s["sostituto_id"])
-                # se abbiamo il dizionario sostituto_trovato potremmo appenderlo, ma id_da_tracciare basta
+            elif s.get("alternativa"):
+                ids_da_tracciare.append(s["alternativa"]["id"])
+                record_prodotti.append(s["alternativa"])
 
         # MACCHINA A STATI: Registra il piatto proposto ed esce dal ricettario per le domande successive
         stato["ultimo_piatto_proposto"] = {
             "id_ricetta": tmpl.get("id_ricetta"),
             "nome_piatto": tmpl.get("nome_piatto"),
             "categoria": tmpl.get("categoria"),
+            "note_composizione": tmpl.get("note_composizione", ""),
             "prodotti_ids": list(ids_da_tracciare),
+            # proposta completa (solo id, serializzabile in sessione): serve a riusarla nei messaggi successivi
+            "slot": [{"ingrediente_richiesto": s.get("ingrediente_richiesto"), "esito": s.get("esito"),
+                      "ruolo": s.get("ruolo"), "note_ingrediente": s.get("note_ingrediente"),
+                      "prodotto_id": (s.get("prodotto_trovato") or {}).get("id"),
+                      "opzione_b_id": (s.get("opzione_b") or {}).get("id"),
+                      "alternativa_id": (s.get("alternativa") or {}).get("id")}
+                     for s in contesto_ricetta.get("slot", [])],
         }
         if tmpl.get("id_ricetta"):
             stato["ricette_mostrate"].add(tmpl.get("id_ricetta"))
+    elif turno_costruzione:
+        record_prodotti = list(turno_costruzione["prodotti"])
+        ids_da_tracciare += [p["id"] for p in record_prodotti]
+        contesto_testuale = turno_costruzione["contesto"] + (
+            "\n" + costruisci_contesto_testuale(record_prodotti) if record_prodotti else "")
+        if turno_costruzione["fase"] == "fatto":
+            # il tagliere scelto diventa la proposta attiva (un "non mi convince" successivo riparte da qui)
+            stato["ultimo_piatto_proposto"] = {
+                "id_ricetta": None, "nome_piatto": "Tagliere costruito con il cliente", "categoria": "tagliere",
+                "note_composizione": "", "prodotti_ids": [p["id"] for p in record_prodotti],
+                "slot": [{"ingrediente_richiesto": ("Salumi" if p["metadata"].get("reparto") == "SALUMI" else "Formaggi")
+                          + " scelti dal cliente", "esito": "TROVATO", "ruolo": "protagonista", "note_ingrediente": "",
+                          "prodotto_id": p["id"], "opzione_b_id": None, "alternativa_id": None} for p in record_prodotti]}
+    elif turno_su_prodotti_in_focus:
+        record_prodotti = [dict(p, match_esatto=True) for p in focus_scelti]
+        ids_da_tracciare += [p["id"] for p in focus_scelti]
+        audit_log.nota("prodotti_in_focus", [p["id"] for p in focus_scelti])
+        contesto_testuale = ("[PRODOTTI DI CUI SI STA PARLANDO: il cliente si riferisce a questi prodotti gia' citati. "
+                             "Rispondi su questi, non proporne altri se non li chiede. Se c'e' una foto il sistema la allega]\n"
+                             + costruisci_contesto_testuale(record_prodotti))
     elif chiede_dettagli_formati_correnti:
         print(f"[DEBUG STATO] Follow-up su piatto attivo: '{ultimo_piatto.get('nome_piatto')}' — recupero schede formati")
         prodotti_ids = ultimo_piatto.get("prodotti_ids", [])
@@ -885,7 +1325,7 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
         )
     else:
         # Se la richiesta è completamente diversa da un piatto (es. catalogo, singola categoria), resettiamo il piatto attivo
-        if not any(k in query_bassa_combinata for k in ["piatto", "primo", "secondo", "tagliere", "pasta", "questi"]):
+        if not any(k in query_bassa_combinata for k in ["piatto", "primo piatto", "secondo piatto", "tagliere", "pasta", "questi"]):
             stato["ultimo_piatto_proposto"] = None
         try:
             record_prodotti = []
@@ -1040,34 +1480,15 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
                 gia_visti = [r for r in record_prodotti if r["id"] in stato["prodotti_mostrati"]]
             record_prodotti = (nuovi + gia_visti)[:N_RISULTATI_RAG]
 
-            # HARD-FILTER DIETETICO DETERMINISTICO (VEGANO)
-            if stato.get("filtro_dieta") == "vegano" or any(v in user_query_clean.lower() for v in ["vegano", "vegana", "vegani", "vegane", "100% vegetale", "plant based"]):
-                stato["filtro_dieta"] = "vegano"
-                from core.config_manager import get_regole_dieta
-                regole_veg = get_regole_dieta("vegano")
-                rep_vietati = [r.upper() for r in regole_veg.get("esclude_reparti", [])]
-                sottocat_vietate = [s.upper() for s in regole_veg.get("esclude_sottocategorie", [])]
-                flag_assoluto = regole_veg.get("richiede_flag_assoluto", "SI")
-                
-                filtrati_veg = []
-                for r in record_prodotti:
-                    meta = r.get("metadata", {})
-                    rep_r = str(meta.get("reparto", "")).upper()
-                    sc_r = str(meta.get("sottocategoria", "")).upper()
-                    flag_v = str(meta.get("vegano", "")).strip().upper()
-                    
-                    if rep_r in rep_vietati:
-                        continue
-                    if sc_r in sottocat_vietate:
-                        continue
-                    if flag_v and flag_v != flag_assoluto:
-                        continue
-                        
-                    filtrati_veg.append(r)
-                record_prodotti = filtrati_veg
+            # Il filtraggio dietetico viene già applicato in modo dinamico e coerente
+            # all'interno di cerca_prodotti() usando le regole dal file YAML.
+            # Non lo facciamo qui a valle altrimenti potremmo svuotare la lista.
 
         except Exception as e:
-            yield f'data: {{"error": "Errore nella ricerca: {e}"}}\n\n'; return
+            err_msg = str(e).replace('"', "'").replace('\n', ' ')
+            print(f"[ERRORE] ricerca fallita: {err_msg}")
+            yield f'data: {{"error": "Errore nella ricerca"}}\n\n'
+            return
 
         prodotti_mostrati_per_contesto = stato["prodotti_mostrati"].copy()
         if is_warm_request:
@@ -1075,13 +1496,39 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
                 pid for pid in prodotti_mostrati_per_contesto
                 if not any(r["id"] == pid and ("gelo" in str(r["metadata"].get("categoria_prodotto","")).lower() or "di tria" in str(r["metadata"].get("nome_fornitore","")).lower()) for r in record_prodotti)
             }
+        if panoramica.e_panoramica(user_query_clean, analisi.tipo_richiesta):
+            # schede complete per prodotti di gruppi diversi, non per i primi risultati della ricerca
+            _rapp = panoramica.rappresentanti(user_query_clean, record_prodotti, indice_testuale)
+            _ids_r = {p["id"] for p in _rapp}
+            record_prodotti = _rapp + [r for r in record_prodotti if r["id"] not in _ids_r]
+        # "Che taglio per la griglia?", "che legumi per una zuppa?": guida alla scelta dal second brain (core/guide_prodotto.py)
+        _blocco_guida = ""
+        if not contesto_ricetta and not turno_costruzione:
+            try:
+                _gs = guide_prodotto.consiglio(user_query_clean, second_brain.BRAIN, stato.get("filtro_dieta") or None,
+                                               stato.get("prodotti_mostrati"), stato.get("canale_locale") or None)
+                if _gs:
+                    _ids_g = {p["id"] for p in _gs["prodotti"]}
+                    record_prodotti = _gs["prodotti"] + [r for r in record_prodotti if r["id"] not in _ids_g]
+                    _blocco_guida = _gs["blocco"]
+                    audit_log.nota("guida_scelta", [p["id"] for p in _gs["prodotti"]])
+            except Exception as _e_g:
+                print(f"[GUIDA] errore (ignorato): {_e_g}")
         contesto_testuale = costruisci_contesto_testuale(record_prodotti, prodotti_mostrati_per_contesto)
-
-        for r in record_prodotti:
-            ids_da_tracciare.append(r["id"])
+        if _blocco_guida:
+            contesto_testuale = _blocco_guida + "\n\n" + contesto_testuale
+        # Domande d'insieme ("che prodotti avete di X?", "che pasta avete?"): il quadro dal catalogo intero (core/panoramica.py)
+        if panoramica.e_panoramica(user_query_clean, analisi.tipo_richiesta):
+            _pan = panoramica.blocco(user_query_clean, record_prodotti, indice_testuale)
+            if _pan:
+                contesto_testuale = _pan + "\n\n" + contesto_testuale
+                audit_log.nota("panoramica", True)
+        # NB: i prodotti del contesto NON sono "mostrati": lo diventano solo quelli citati nella risposta (sotto,
+        # dopo il guardrail). Prima tutti i ~40-65 del contesto finivano tra i gia' mostrati e venivano messi in coda
+        # nelle ricerche successive anche se il cliente non li aveva mai visti.
 
     # Safety net per richieste specifiche (solo se non siamo in follow-up formati sul piatto corrente)
-    if not chiede_dettagli_formati_correnti:
+    if not chiede_dettagli_formati_correnti and not turno_su_prodotti_in_focus and not proposta_riusata and not turno_costruzione:
         contesto_testuale = esegui_safety_net_prodotti(
             user_query, contesto_testuale, collezione, indice_codici_prodotto, embedder, indice_fornitori,
             indice_testuale=indice_testuale
@@ -1095,12 +1542,59 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
         stato["prodotti_mostrati_ordinati"] = stato["prodotti_mostrati_ordinati"][-MAX_PRODOTTI_MOSTRATI_TRACCIATI:]
     stato["prodotti_mostrati"] = set(stato["prodotti_mostrati_ordinati"])
 
+    # Second brain: abbinamenti verificati (ricettario + catalogo) e scheda azienda se richiesta
+    try:
+        if not chiede_dettagli_formati_correnti and 'record_prodotti' in locals() and record_prodotti:
+            # nei piatti composti (primi, secondi, pizze...) il piatto e' gia' l'abbinamento: niente abbinamenti per ingrediente
+            _cat_prop = str(((contesto_ricetta or {}).get("template") or {}).get("categoria") or "").lower()
+            _blocco_sb = second_brain.BRAIN.blocco_contesto(
+                record_prodotti, user_query, dieta=stato.get("filtro_dieta") or None,
+                esclusi=stato.get("prodotti_mostrati"), canale=stato.get("canale_locale") or None,
+                con_abbinamenti=(turno_costruzione["fase"] == "fatto") if turno_costruzione
+                else (not contesto_ricetta or _cat_prop in ("tagliere", "aperitivo", "antipasto")),
+                dettaglio_prodotto=not contesto_ricetta and not turno_costruzione)
+            if _blocco_sb:
+                contesto_testuale = contesto_testuale + "\n\n" + _blocco_sb
+    except Exception as _e_sb:
+        print(f"[SECOND BRAIN] errore (ignorato): {_e_sb}")
+
+    # Abstention: parole della richiesta che non compaiono MAI nel catalogo (es. "arancini", "wagyu")
+    try:
+        _senza_riscontro = copertura_richiesta.termini_senza_riscontro(user_query, indice_testuale)
+        if _senza_riscontro:
+            print(f"[COPERTURA] termini senza riscontro a catalogo: {_senza_riscontro}")
+            audit_log.nota("termini_senza_riscontro", _senza_riscontro)
+            contesto_testuale = contesto_testuale + "\n" + copertura_richiesta.riga_contesto(_senza_riscontro)
+    except Exception as _e_c:
+        print(f"[COPERTURA] errore (ignorato): {_e_c}")
+
+    # Domande su consegne, ordine minimo, pagamenti, sede, calendario freschi: dati ufficiali (core/info_azienda.py)
+    try:
+        _info = info_azienda.blocco_contesto(user_query, stato.get("citta"))
+        if _info:
+            audit_log.nota("info_azienda", True)
+            contesto_testuale = contesto_testuale + "\n\n" + _info
+    except Exception as _e_i:
+        print(f"[INFO AZIENDA] errore (ignorato): {breve(_e_i)}")
+
+    # Storico lungo: i messaggi piu' vecchi non si scartano, si riassumono (core/riassunto.py), una chiamata lite ogni ~2 turni
+    max_messaggi = MAX_SCAMBI_STORICO * 2
+    if len(stato["storico"]) > max_messaggi + 4:
+        scartati = stato["storico"][:-max_messaggi]
+        stato["storico"] = stato["storico"][-max_messaggi:]
+        stato["riassunto"] = riassunto.aggiorna(client_genai, MODELLO_RIASSUNTO, stato.get("riassunto", ""), scartati)
+        audit_log.nota("riassunto_aggiornato", len(stato["riassunto"]))
+
+    audit_log.nota("contesto", {"prodotti": len(record_prodotti) if "record_prodotti" in locals() else 0,
+                                 "caratteri": len(contesto_testuale)})
+    audit_log.nota("prodotti_contesto", [r["id"] for r in (record_prodotti if "record_prodotti" in locals() else [])][:40])
+
     # Creazione prompt finale
     prompt_di_sistema_completo = build_modular_prompt(
         analisi.tipo_richiesta,
         stato.get("canale_locale", ""),
         stato.get("filtro_dieta", "")
-    ) + "\n\n" + carica_memoria_dinamica()
+    )
 
     info_profilo = []
     if stato.get("tipo_locale"):
@@ -1109,6 +1603,20 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
         info_profilo.append(f"- Stile cucina: {stato['stile_cucina']}")
     if stato.get("filtro_dieta"):
         info_profilo.append(f"- Dieta / Vincolo alimentare: {stato['filtro_dieta']}")
+    if stato.get("citta"):
+        _z = stato.get("zona_consegna")
+        _nota = {"fuori": "FUORI zona refrigerata: spedizione SOLO di prodotti a temperatura ambiente (i refrigerati/surgelati sono gia' stati esclusi)",
+                 "coperta": "zona coperta dai mezzi refrigerati", "sconosciuta": "zona da verificare al momento dell'ordine"}.get(_z, "")
+        info_profilo.append(f"- Il CLIENTE si trova a {stato['citta']} (e' li' che va consegnato; So Food ha sede a Bari)"
+                            + (f": {_nota}" if _nota else ""))
+    if stato.get("esclusioni_cliente"):
+        info_profilo.append(f"- Il cliente NON vuole (vincolo permanente): {', '.join(stato['esclusioni_cliente'])}")
+    if stato.get("allergie"):
+        info_profilo.append(f"- ALLERGIE dichiarate (i prodotti a rischio sono gia' stati esclusi): "
+                            f"{', '.join(allergeni.etichetta(a) for a in stato['allergie'])}")
+    if stato.get("ordine_in_attesa"):
+        info_profilo.append("- C'e' un ordine in attesa di conferma: ricorda al cliente che per inviarlo basta scrivere CONFERMO "
+                            "(o dirti cosa cambiare)")
     blocco_profilo = "\n    [PROFILO CLIENTE MEMORIZZATO]\n    " + "\n    ".join(info_profilo) + "\n" if info_profilo else ""
 
     istruzioni_conteggio = []
@@ -1118,10 +1626,11 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
                 istruzioni_conteggio.append(f"- Categoria '{elem.dominio}': devi presentare ESATTAMENTE {elem.quantita} prodotti. Nè uno di più, nè uno di meno.\n  (Eccezione: se non ci sono abbastanza risultati perfetti, per raggiungere la quota {elem.quantita} proponi i prodotti più simili o affini presenti nei DATI RAG piuttosto che dire che non ne abbiamo).")
     
     blocco_conteggi = ""
-    if istruzioni_conteggio:
+    if istruzioni_conteggio and not turno_costruzione:  # nella costruzione i numeri li gestisce il blocco dedicato
         blocco_conteggi = "\n[VINCOLI DI QUANTITA' OBBLIGATORI (Da rispettare rigorosamente, salvo eccezioni indicate)]\n" + "\n".join(istruzioni_conteggio) + "\n"
 
-    prompt_finale = f"""{blocco_profilo}{blocco_conteggi}
+    avviso_injection = ("\n    " + sicurezza.AVVISO_INJECTION + "\n") if injection else ""
+    prompt_finale = f"""{avviso_injection}{blocco_profilo}{riassunto.blocco_prompt(stato.get("riassunto", ""))}{blocco_conteggi}
     [DATI RAG ESTRATTI DAL CATALOGO - USA QUESTE INFO PER RISPONDERE]
     {contesto_testuale}
 
@@ -1129,19 +1638,15 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
     {user_query}
     """
 
-    max_messaggi = MAX_SCAMBI_STORICO * 2
-    if len(stato["storico"]) > max_messaggi:
-        stato["storico"] = stato["storico"][-max_messaggi:]
-
     # Modello da usare per le risposte utente: Gemini 3.5 Flash-Lite con fallback su Gemini 3.7 Flash
     modello_da_usare = os.getenv("MODELLO_RISPOSTA", MODELLO_PRINCIPALE)
 
-    # Generazione risposta con ciclo di Auto-Correzione (Reflection)
-    for tentativo_riflessione in range(2):
+    # Generazione risposta 
+    try:
         chat_session = client_genai.chats.create(
             model=modello_da_usare,
             config=types.GenerateContentConfig(system_instruction=prompt_di_sistema_completo, temperature=0.3),
-            history=stato["storico"]
+            history=stato["storico"][:-1]  # il messaggio attuale arriva dentro prompt_finale
         )
     
         response = None
@@ -1152,31 +1657,34 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
                 testo_pulito = ""
                 for chunk in response_stream:
                     if chunk.text:
-                        testo_pulito += chunk.text
+                        # Rimuoviamo il testo "sottofondo" anche dal chunk se possibile per evitare che l'utente veda la parola sbagliata
+                        chunk_text = pulisci_chunk(chunk.text)
+                        testo_pulito += chunk_text
                         import json
-                        chunk_json = json.dumps({"chunk": chunk.text})
+                        chunk_json = json.dumps({"chunk": chunk_text})
                         yield f"data: {chunk_json}\n\n"
                 break
             except Exception as e:
                 err_msg = str(e)
                 if any(k in err_msg for k in ["429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE"]):
                     if modello_da_usare != MODELLO_FALLBACK:
-                        print(f"[ATTENZIONE] Fallback da {modello_da_usare} a {MODELLO_FALLBACK} per errore: {err_msg[:80]}")
+                        print(f"[ATTENZIONE] Fallback da {modello_da_usare} a {MODELLO_FALLBACK} per errore: {breve(err_msg)}")
                         modello_da_usare = MODELLO_FALLBACK
                         try:
                             chat_session = client_genai.chats.create(
                                 model=MODELLO_FALLBACK,
                                 config=types.GenerateContentConfig(system_instruction=prompt_di_sistema_completo, temperature=0.3),
-                                history=stato["storico"]
+                                history=stato["storico"][:-1]  # il messaggio attuale arriva dentro prompt_finale
                             )
                             yield 'data: {"status": "Scrivo la risposta..."}\n\n'
                             response_stream = chat_session.send_message_stream(prompt_finale)
                             testo_pulito = ""
                             for chunk in response_stream:
                                 if chunk.text:
-                                    testo_pulito += chunk.text
+                                    chunk_text = pulisci_chunk(chunk.text)
+                                    testo_pulito += chunk_text
                                     import json
-                                    chunk_json = json.dumps({"chunk": chunk.text})
+                                    chunk_json = json.dumps({"chunk": chunk_text})
                                     yield f"data: {chunk_json}\n\n"
                             break
                         except Exception as fb_err:
@@ -1184,83 +1692,129 @@ def stream_messaggio_nino(user_query: str, stato: dict, sid: str) :
                     if tentat < 2:
                         time.sleep(3 * (tentat + 1))
                         continue
-                yield f'data: {{"error": "Errore del modello: {e}"}}\n\n'; return
+                print(f"[ERRORE] modello non disponibile: {breve(err_msg)}")
+                audit_log.nota("errore", breve(err_msg))
+                audit_log.chiudi(stato, "")
+                # il messaggio resta senza risposta: lo si toglie dallo storico, cosi' il cliente puo' semplicemente riscriverlo
+                if stato["storico"] and stato["storico"][-1].role == "user":
+                    stato["storico"].pop()
+                yield f'data: {json.dumps({"error": MSG_ERRORE_CLIENTE})}\n\n'
+                return
     
-        testo_pulito = re.sub(r'\b[Ss]ottofondo\b', 'sottovuoto', testo_pulito)
-        testo_pulito = re.sub(r'PRODOTTI\s+SOFOUND', 'PRODOTTI SOFOOD', testo_pulito, flags=re.IGNORECASE)
-        testo_pulito = re.sub(r'^\s*#{1,6}\s*(.+)$', r'**\1**', testo_pulito, flags=re.MULTILINE)
-        testo_pulito = re.sub(r'(\s*[\*\-]\s*)\*{3,}', r'\1**', testo_pulito)
-        testo_pulito = re.sub(r'\*{4,}', '**', testo_pulito)
-        testo_pulito = re.sub(r'\*\*\s*\*\*', '', testo_pulito)
-        testo_pulito = re.sub(r'\*\*([^\n*]{1,40}?)\s+-\s+([^\n*]+?)\*\*', r'**\2**', testo_pulito)
-        testo_pulito = re.sub(r'(\*\*[^*]*?)\s*\b(?:[Ss]ottovuoto|[Ss]/[Vv]|[Aa][Tt][Mm]|[Ss]/[Oo])\b\s*([^*]*?\*\*)', r'\1\2', testo_pulito)
-        testo_pulito = re.sub(r'\*\*([^*]+?)\*\*', lambda m: f'**{m.group(1).strip()}**', testo_pulito)
-        testo_pulito = re.sub(r'\bnel\s+catalogo\s+di\s+questo\s+turno\b', 'a catalogo', testo_pulito, flags=re.IGNORECASE)
-        testo_pulito = re.sub(r'\bin\s+questo\s+turno\b', 'al momento', testo_pulito, flags=re.IGNORECASE)
-        testo_pulito = re.sub(r'\bnel\s+contesto\s+(?:fornito|a\s+disposizione)\b', 'a catalogo', testo_pulito, flags=re.IGNORECASE)
-        testo_pulito = re.sub(r'\bdi\s+questo\s+turno\b', 'del catalogo', testo_pulito, flags=re.IGNORECASE)
+        testo_pulito = pulisci_markdown(testo_pulito)  # core/formato_testo.py
     
-        # 6. Garante Immagini (Ridotto per evitare spam)
-        # L'immagine viene iniettata SOLO SE:
-        # 1. L'utente ha chiesto esplicitamente una foto/immagine
-        # 2. Oppure se stiamo parlando di UN SINGOLO prodotto (es. ricerca molto specifica)
-        richiede_foto = any(w in user_query.lower() for w in ["foto", "immagine", "immagini", "vederlo", "fotografia", "fammelo vedere"])
-        tutti_record = list(record_prodotti) if 'record_prodotti' in locals() else []
-        mostra_immagini = richiede_foto or len(tutti_record) == 1
-        
-        if mostra_immagini:
-            for r in tutti_record:
-                meta_r = r.get("metadata", {})
-                p_img = str(meta_r.get("percorso_immagine", "")).strip()
-                ha_img = meta_r.get("ha_immagine_primaria") and p_img and p_img.lower() not in ("", "nan", "none", "false") and os.path.exists(p_img)
-                if ha_img and p_img not in testo_pulito:
-                    prima_l = r.get("document", "").splitlines()[0] if r.get("document") else ""
-                    nome_p = pulisci_nome_commerciale(prima_l, meta_r.get("nome_fornitore", "")).strip().lower()
-                    forn_p = str(meta_r.get("nome_fornitore", "")).strip().lower()
-                    righe = testo_pulito.splitlines()
-                    nuove_righe = []
-                    inserito = False
-                    for riga in righe:
-                        nuove_righe.append(riga)
-                        if not inserito and riga.strip().startswith(("-", "*", "•")):
-                            riga_low = riga.lower()
-                            parole_chiave_nome = [w for w in re.findall(r'\w+', nome_p) if len(w) > 3]
-                            
-                            match_count = sum(1 for w in parole_chiave_nome if w in riga_low)
-                            soglia = min(2, len(parole_chiave_nome)) if parole_chiave_nome else 0
-                            match_forn = forn_p in riga_low if len(forn_p) > 3 else False
-                            
-                            if match_count >= soglia or (match_count >= 1 and match_forn):
-                                nuove_righe.append(f"[IMG: {p_img}]")
-                                inserito = True
-                    if inserito:
-                        testo_pulito = "\n".join(nuove_righe)
-                        import json
-                        yield f'data: {json.dumps({"chunk": "\n\n" + nuove_righe[-1]})}\n\n'
-            testo_pulito = re.sub(r'(\[IMG:\s*[^\]]+\])(?:\s*\1)+', r'\1', testo_pulito)
-        else:
-            # Strip any [IMG] tags that the LLM might have generated on its own
-            testo_pulito = re.sub(r'\s*\[IMG:\s*[^\]]+\]\s*', ' ', testo_pulito)
-            
+        # 5b. Guardrail anti-allucinazione: ogni prodotto citato (in grassetto) deve esistere a catalogo
+        # e rispettare la dieta del cliente. Il testo e' gia' stato mostrato in streaming, quindi se
+        # c'e' un problema si accoda una correzione e si ripulisce lo storico (core/guardrail_output.py).
+        if os.getenv("GUARDRAIL_OUTPUT", "1") == "1":
+            try:
+                esito_g = guardrail_output.verifica_prodotti_citati(testo_pulito, indice_testuale, stato.get("filtro_dieta"),
+                                                                    stato.get("allergie"))
+                for _r, _c, _pid in esito_g["dubbi"]:
+                    print(f"[GUARDRAIL] citazione dubbia (probabile parafrasi): '{_c}' ~ {_pid}")
+                audit_log.nota("guardrail", {"verificati": esito_g["verificati"],
+                                             "non_verificati": [c for _, c in esito_g["non_verificati"]],
+                                             "incompatibili": [c for _, c, _m in esito_g["incompatibili"]],
+                                             "dubbi": [c for _, c, _p in esito_g["dubbi"]]})
+                if esito_g["non_verificati"] or esito_g["incompatibili"]:
+                    print(f"[GUARDRAIL] non verificati: {[c for _, c in esito_g['non_verificati']]} | "
+                          f"incompatibili: {[c for _, c, _m in esito_g['incompatibili']]}")
+                    nota_g = guardrail_output.nota_correzione(esito_g)
+                    testo_pulito = guardrail_output.ripulisci_testo(testo_pulito, esito_g)
+                    if nota_g:
+                        import json as _json_g
+                        yield f"data: {_json_g.dumps({'chunk': nota_g})}\n\n"
+                        testo_pulito += nota_g
+                    stato["log_chat"].append({"ruolo": "guardrail", "testo": nota_g.strip(),
+                                              "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+            except Exception as _e_g:
+                print(f"[GUARDRAIL] errore (ignorato): {_e_g}")
+            # Formati e canale dichiarati nel testo (es. "cartoni HORECA" per un prodotto da 300 g)
+            try:
+                err_formati = guardrail_output.verifica_formati(testo_pulito, indice_testuale)
+                if err_formati:
+                    print(f"[GUARDRAIL] formati/canale errati: {[m for _, _, m in err_formati]}")
+                    audit_log.nota("formati_errati", [m for _, _, m in err_formati])
+                    nota_f = guardrail_output.nota_formati(err_formati)
+                    import json as _json_f
+                    yield f"data: {_json_f.dumps({'chunk': nota_f})}\n\n"
+                    testo_pulito += nota_f
+                    stato["log_chat"].append({"ruolo": "guardrail", "testo": nota_f.strip(),
+                                              "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+            except Exception as _e_f:
+                print(f"[GUARDRAIL] errore formati (ignorato): {_e_f}")
+            # Produttori citati che non esistono a catalogo
+            try:
+                err_prod = guardrail_output.verifica_produttori(testo_pulito, indice_testuale)
+                if err_prod:
+                    print(f"[GUARDRAIL] produttori inesistenti: {[c for _, c in err_prod]}")
+                    audit_log.nota("produttori_inesistenti", [c for _, c in err_prod])
+                    nota_p = ("\n\nCorrezione: " +", ".join(f"«{c}»" for _, c in err_prod)
+                              + " non risulta tra i nostri produttori; fai riferimento solo ai prodotti indicati con il loro produttore.")
+                    import json as _json_p
+                    yield f"data: {_json_p.dumps({'chunk': nota_p})}\n\n"
+                    testo_pulito += nota_p
+            except Exception as _e_p:
+                print(f"[GUARDRAIL] errore produttori (ignorato): {_e_p}")
+
+        # 6. Foto e prodotti "in primo piano" (core/foto.py). Una foto si mostra solo se il prodotto e' identificato
+        # senza ambiguita' (guardrail: un solo candidato) e il file esiste; e solo quando serve: il cliente la chiede,
+        # e' incerto su un prodotto, o chiede informazioni su uno o due prodotti precisi.
+        testo_pulito = re.sub(r'[ \t]*\[IMG:[^\]]*\][ \t]*', '', testo_pulito)  # mai foto scelte dal modello
+        try:
+            certi = (locals().get("esito_g") or {}).get("certi") or guardrail_output.verifica_prodotti_citati(
+                testo_pulito, indice_testuale)["certi"]
+        except Exception:
+            certi = []
+        if certi:
+            stato["prodotti_in_focus"] = list(dict.fromkeys(i for _c, i in certi))[:5]
+            for _pid in dict.fromkeys(i for _c, i in certi):  # mostrati = citati davvero
+                if _pid not in stato["prodotti_mostrati_ordinati"]:
+                    stato["prodotti_mostrati_ordinati"].append(_pid)
+            stato["prodotti_mostrati"] = set(stato["prodotti_mostrati_ordinati"][-MAX_PRODOTTI_MOSTRATI_TRACCIATI:])
+        audit_log.nota("citati", len({i for _c, i in certi}))
+        per_id = {p["id"]: p for p in indice_testuale}
+        info_su_prodotto = turno_su_prodotti_in_focus or (analisi.tipo_richiesta == "ricerca_specifica"
+                                                          and len({i for _c, i in certi}) <= 2)
+        foto_ids = foto.scegli(user_query, certi, per_id, info_su_prodotto,
+                               preferiti=[p["id"] for p in focus_scelti] if turno_su_prodotti_in_focus else None)
+        if foto_ids:
+            testo_pulito = foto.inserisci(testo_pulito, certi, foto_ids, per_id)
+            audit_log.nota("foto", foto_ids)
+            for _fid in foto_ids:
+                yield f'data: {json.dumps({"chunk": chr(10) + chr(10) + "[IMG: " + str(foto.percorso(per_id[_fid]["metadata"])) + "]"})}\n\n'
+
         # Clean up any excessive newlines left behind by stripping
         testo_pulito = re.sub(r'\n{3,}', '\n\n', testo_pulito)
         testo_pulito = re.sub(r' \n', '\n', testo_pulito)
         testo_pulito = re.sub(r'\n ,', ',', testo_pulito)
         
-        break
+        # Il messaggio utente è già stato salvato all'inizio della funzione. Salviamo solo la risposta del modello.
+        stato["storico"].append(types.Content(role="model", parts=[types.Part.from_text(text=testo_pulito)]))
+        timestamp_ora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        stato["log_chat"].append({"ruolo": "nino", "testo": testo_pulito, "timestamp": timestamp_ora})
+        stato["contatore_messaggi"] += 1
 
-    stato["storico"].append(types.Content(role="user", parts=[types.Part.from_text(text=user_query)]))
-    stato["storico"].append(types.Content(role="model", parts=[types.Part.from_text(text=testo_pulito)]))
+        if stato["contatore_messaggi"] % FREQUENZA_SALVATAGGIO_LOG == 0:
+            salva_log_chat(sid, stato)
+        sessioni_store.salva(sid, stato)
+        audit_log.chiudi(stato, testo_pulito)
+        # Testo finale gia' ripulito dai guardrail: lo usano i canali che non mostrano lo streaming (/chat, vocali)
+        yield 'data: {"final": ' + json.dumps(testo_pulito) + '}\n\n'
 
-    timestamp_ora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    stato["log_chat"].append({"ruolo": "utente", "testo": user_query, "timestamp": timestamp_ora})
-    stato["log_chat"].append({"ruolo": "nino", "testo": testo_pulito, "timestamp": timestamp_ora})
-    stato["contatore_messaggi"] += 1
+    except Exception as general_e:
+        import traceback
+        traceback.print_exc()
+        print(f"[ERRORE] interno: {breve(general_e)}")
+        yield f'data: {json.dumps({"error": MSG_ERRORE_CLIENTE})}\n\n'
+        audit_log.nota("errore", str(general_e)[:200])
+        audit_log.chiudi(stato, "")
+    finally:
+        yield 'data: {"done": true}\n\n'
 
-    if stato["contatore_messaggi"] % FREQUENZA_SALVATAGGIO_LOG == 0:
-        salva_log_chat(sid, stato)
 
-    yield 'data: {"done": true}\n\n'
+# WhatsApp Cloud API (spento di default: WHATSAPP_ENABLED=1, vedi core/whatsapp.py)
+whatsapp.registra_whatsapp(app, elabora_messaggio_nino, stato_per_sid, trascrivi_audio)
 
 
 @app.route("/api/v1/chat/stream", methods=["POST"])
@@ -1360,15 +1914,6 @@ def chat_audio():
     return jsonify(risultato)
 
 
-@app.route("/logo.png")
-def servi_logo():
-    """Restituisce il logo aziendale ufficiale So Food per l'avatar WhatsApp"""
-    p = os.path.join(os.path.dirname(__file__), "static", "logo_sofood.png")
-    if os.path.exists(p):
-        return send_file(p, mimetype="image/png")
-    return "Logo non trovato", 404
-
-
 @app.route("/immagine")
 def servi_immagine():
     """Questa rotta riceve il percorso dal browser e gli invia il file immagine reale.
@@ -1385,926 +1930,30 @@ def servi_immagine():
         
     # Sicurezza: assicura che il percorso sia all'interno del DATA_LAKE_PATH
     data_lake_path = os.getenv("DATA_LAKE_PATH")
-    if data_lake_path:
-        base_dir = os.path.abspath(data_lake_path)
-        req_dir = os.path.abspath(percorso)
-        if not req_dir.startswith(base_dir):
+    if not data_lake_path:
+        return "Accesso negato: configurazione di sicurezza mancante (DATA_LAKE_PATH non definito).", 403
+        
+    base_dir = os.path.abspath(data_lake_path)
+    req_dir = os.path.abspath(percorso)
+    
+    # Prevenzione di base_dir="C:\data" vs req_dir="C:\data_evil" usando commonpath
+    try:
+        if os.path.commonpath([base_dir, req_dir]) != base_dir:
             return "Accesso negato: percorso non consentito.", 403
+    except ValueError:
+        # Se sono su due dischi diversi (es. C: vs D:)
+        return "Accesso negato: percorsi incompatibili.", 403
 
     if os.path.exists(percorso):
         return send_file(percorso)
     return "Immagine non trovata o percorso non valido", 404
 
 
-# ====================================================================
-# FRONTEND HTML & JS (REPLICA FEDELE WHATSAPP CHAT)
-# ====================================================================
-HTML_TEMPLATE = r"""
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <title>WhatsApp • So Food</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <style>
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        html, body {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            width: 100%;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #d1d7db;
-            color: #111b21;
-        }
-        
-        .wa-app {
-            display: flex;
-            flex-direction: column;
-            height: 100dvh;
-            max-width: 820px;
-            margin: 0 auto;
-            background: #ffffff;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.15);
-            position: relative;
-        }
-
-        /* HEADER WHATSAPP */
-        .wa-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 8px 14px;
-            background-color: #008069;
-            color: #ffffff;
-            z-index: 10;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-        }
-        .wa-header-left {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .wa-back-btn {
-            background: none;
-            border: none;
-            color: #ffffff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            padding: 4px;
-            margin-right: -4px;
-        }
-        .wa-avatar {
-            width: 42px;
-            height: 42px;
-            border-radius: 50%;
-            background: #ffffff; /* Sfondo bianco per il logo */
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            flex-shrink: 0;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-            cursor: pointer;
-            border: 1px solid rgba(255,255,255,0.4);
-        }
-        .wa-avatar img {
-            width: 90%;
-            height: 90%;
-            object-fit: contain;
-        }
-        .wa-contact-info {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        .wa-name {
-            font-size: 16.5px;
-            font-weight: 600;
-            line-height: 1.2;
-            letter-spacing: -0.1px;
-        }
-        .wa-status {
-            font-size: 12.5px;
-            color: #d1fae5;
-            margin-top: 1px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            transition: color 0.2s;
-        }
-        .wa-header-right {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            color: #ffffff;
-        }
-        .wa-icon-btn {
-            background: none;
-            border: none;
-            color: #ffffff;
-            cursor: pointer;
-            padding: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 0.9;
-        }
-        .wa-icon-btn:hover { opacity: 1; }
-
-        /* CHAT AREA WHATSAPP */
-        #chatbox {
-            flex: 1;
-            overflow-y: auto;
-            padding: 12px 16px 14px 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            background-color: #efeae2;
-            background-image: 
-                radial-gradient(#d5ceb9 0.85px, transparent 0.85px), 
-                radial-gradient(#d5ceb9 0.85px, #efeae2 0.85px);
-            background-size: 26px 26px;
-            background-position: 0 0, 13px 13px;
-        }
-
-        /* SECURITY PILL & DATE PILL */
-        .wa-security-pill {
-            align-self: center;
-            background-color: #ffeecd;
-            color: #54656f;
-            font-size: 11.5px;
-            line-height: 1.4;
-            padding: 6px 14px;
-            border-radius: 8px;
-            text-align: center;
-            max-width: 90%;
-            margin: 4px auto 8px auto;
-            box-shadow: 0 1px 1px rgba(11,20,26,0.08);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-        .wa-date-pill {
-            align-self: center;
-            background-color: #ffffff;
-            color: #54656f;
-            font-size: 11.5px;
-            font-weight: 500;
-            padding: 4px 12px;
-            border-radius: 7.5px;
-            box-shadow: 0 1px 1px rgba(11,20,26,0.1);
-            margin: 2px auto 10px auto;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
-        }
-
-        /* BUBBLES */
-        .msg-row {
-            display: flex;
-            width: 100%;
-            margin: 2px 0;
-        }
-        .msg-row.nino { justify-content: flex-start; }
-        .msg-row.tu { justify-content: flex-end; }
-
-        .wa-bubble {
-            max-width: 82%;
-            padding: 6px 9px 6px 9px;
-            font-size: 14.2px;
-            line-height: 1.42;
-            word-wrap: break-word;
-            position: relative;
-            box-shadow: 0 1px 0.5px rgba(11,20,26,0.13);
-        }
-        .wa-bubble.nino {
-            background-color: #ffffff;
-            color: #111b21;
-            border-radius: 7.5px;
-            border-top-left-radius: 0;
-        }
-        .wa-bubble.tu {
-            background-color: #d9fdd3;
-            color: #111b21;
-            border-radius: 7.5px;
-            border-top-right-radius: 0;
-        }
-
-        .bubble-content {
-            margin-bottom: 2px;
-        }
-        .wa-heading {
-            font-weight: 700;
-            font-size: 15px;
-            margin-top: 8px;
-            margin-bottom: 4px;
-            color: #075e54;
-            display: block;
-        }
-        .wa-heading:first-child { margin-top: 0; }
-        .wa-bullet {
-            display: flex;
-            align-items: flex-start;
-            margin: 3px 0;
-            line-height: 1.4;
-        }
-        .wa-dot-bullet {
-            margin-right: 6px;
-            font-weight: bold;
-            color: #128c7e;
-            flex-shrink: 0;
-        }
-        .wa-num-bullet {
-            margin-right: 6px;
-            font-weight: bold;
-            color: #128c7e;
-            flex-shrink: 0;
-        }
-        .wa-divider {
-            border: 0;
-            border-top: 1px solid rgba(0,0,0,0.12);
-            margin: 8px 0;
-        }
-        .bubble-meta {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 3px;
-            float: right;
-            margin-left: 10px;
-            margin-top: 4px;
-            font-size: 11px;
-            color: #667781;
-            user-select: none;
-        }
-        .ticks {
-            color: #53bdeb; /* Doppia spunta blu WhatsApp */
-            font-size: 13px;
-            line-height: 1;
-            font-weight: bold;
-        }
-
-        /* IMMAGINI NELLA CHAT */
-        .product-img {
-            width: 100%;
-            max-width: 300px;
-            aspect-ratio: 1 / 1;
-            object-fit: contain;
-            border-radius: 6px;
-            margin: 6px auto;
-            background: #ffffff;
-            border: 1px solid #e9edef;
-            display: block;
-            cursor: pointer;
-            transition: opacity 0.15s ease;
-        }
-        .product-img:hover { opacity: 0.94; }
-
-        /* AUDIO PLAYER IN WHATSAPP STYLE */
-        .wa-audio-container {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            min-width: 250px;
-            max-width: 320px;
-            padding: 2px 0;
-        }
-        .wa-audio-player {
-            width: 100%;
-            height: 38px;
-            border-radius: 20px;
-            outline: none;
-        }
-        .wa-transcription-box {
-            background: rgba(0, 128, 105, 0.08);
-            border-left: 3px solid #008069;
-            padding: 6px 10px;
-            border-radius: 4px;
-            font-size: 13px;
-            color: #111b21;
-            font-style: italic;
-            line-height: 1.35;
-            margin-top: 4px;
-        }
-        .wa-transcription-label {
-            font-size: 11px;
-            font-weight: 600;
-            color: #008069;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            margin-bottom: 2px;
-            font-style: normal;
-        }
-
-        /* INPUT AREA WHATSAPP */
-        .wa-input-bar {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 10px;
-            background-color: #f0f2f5;
-            border-top: 1px solid #e9edef;
-            z-index: 10;
-        }
-        .wa-input-icons {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            color: #54656f;
-        }
-        .wa-action-icon {
-            background: none;
-            border: none;
-            color: #54656f;
-            cursor: pointer;
-            padding: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            transition: background 0.15s;
-        }
-        .wa-action-icon:hover { background: #e2e5e9; }
-
-        .wa-input-wrapper {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            background: #ffffff;
-            border-radius: 22px;
-            padding: 2px 14px;
-            box-shadow: 0 1px 1px rgba(0,0,0,0.06);
-        }
-        input#userInput {
-            width: 100%;
-            padding: 9px 0;
-            border: none;
-            outline: none;
-            font-size: 15px;
-            color: #111b21;
-            background: transparent;
-        }
-        input#userInput::placeholder { color: #8696a0; }
-
-        /* BARRA DI REGISTRAZIONE VOCALE WHATSAPP */
-        .wa-recording-bar {
-            display: none;
-            flex: 1;
-            align-items: center;
-            justify-content: space-between;
-            background: #ffffff;
-            border-radius: 22px;
-            padding: 6px 14px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.08);
-        }
-        .wa-recording-info {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .wa-rec-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background-color: #ea4335;
-            animation: waPulseRec 0.8s infinite alternate ease-in-out;
-        }
-        @keyframes waPulseRec {
-            from { opacity: 1; transform: scale(1.1); }
-            to { opacity: 0.25; transform: scale(0.8); }
-        }
-        .wa-rec-timer {
-            font-size: 15px;
-            font-weight: 600;
-            color: #111b21;
-            font-variant-numeric: tabular-nums;
-        }
-        .wa-rec-label {
-            font-size: 13px;
-            color: #667781;
-        }
-        .wa-rec-actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .wa-rec-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            transition: background 0.15s;
-        }
-        .wa-rec-btn:hover { background: #f0f2f5; }
-        .wa-rec-btn.send {
-            background-color: #008069;
-            color: #ffffff;
-        }
-        .wa-rec-btn.send:hover { background-color: #006a57; }
-
-        .wa-btn-group {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        button#micBtn, button#sendBtn {
-            width: 42px;
-            height: 42px;
-            border-radius: 50%;
-            background-color: #008069;
-            color: white;
-            border: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            flex-shrink: 0;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.18);
-            transition: background-color 0.15s, transform 0.1s;
-        }
-        button#micBtn:hover, button#sendBtn:hover { background-color: #006a57; }
-        button#micBtn:active, button#sendBtn:active { transform: scale(0.95); }
-
-        /* LOADING ANIMATION WHATSAPP */
-        .wa-typing {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            padding: 4px 2px;
-        }
-        .wa-dot {
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: #8696a0;
-            animation: waBounce 1.3s infinite ease-in-out both;
-        }
-        .wa-dot:nth-child(1) { animation-delay: -0.32s; }
-        .wa-dot:nth-child(2) { animation-delay: -0.16s; }
-        @keyframes waBounce {
-            0%, 80%, 100% { transform: scale(0); }
-            40% { transform: scale(1); }
-        }
-
-        /* MODALE LIGHTBOX WHATSAPP */
-        #imgModal {
-            display: none;
-            position: fixed;
-            z-index: 9999;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(11, 20, 26, 0.94);
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            cursor: pointer;
-        }
-        #modalImg {
-            max-width: 90%;
-            max-height: 85vh;
-            border-radius: 8px;
-            object-fit: contain;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.5);
-            background: #ffffff;
-            padding: 4px;
-        }
-        .zoom-hint {
-            color: #8696a0;
-            margin-top: 14px;
-            font-size: 13px;
-        }
-    </style>
-</head>
-<body>
-    <div class="wa-app">
-        <!-- HEADER WHATSAPP -->
-        <header class="wa-header">
-            <div class="wa-header-left">
-                <button class="wa-back-btn" aria-label="Indietro">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-                </button>
-                <div class="wa-avatar" onclick="apriZoom('/logo.png')" title="Visualizza logo So Food">
-                    <img src="/logo.png" alt="So Food">
-                </div>
-                <div class="wa-contact-info">
-                    <div class="wa-name">So Food</div>
-                    <div class="wa-status" id="waStatus">online</div>
-                </div>
-            </div>
-            <div class="wa-header-right">
-                <button class="wa-icon-btn" title="Videochiamata">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
-                </button>
-                <button class="wa-icon-btn" title="Chiamata">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
-                </button>
-                <button class="wa-icon-btn" title="Cerca">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-                </button>
-                <button class="wa-icon-btn" title="Altre opzioni">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
-                </button>
-            </div>
-        </header>
-
-        <!-- CHAT AREA -->
-        <div id="chatbox">
-            <div class="wa-security-pill">
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="#54656f"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
-                <span>I messaggi con questo account aziendale sono protetti con crittografia end-to-end.</span>
-            </div>
-            <div class="wa-date-pill">OGGI</div>
-        </div>
-
-        <!-- INPUT BAR WHATSAPP -->
-        <div class="wa-input-bar">
-            <div class="wa-input-icons">
-                <button class="wa-action-icon" title="Emoji">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>
-                </button>
-                <input type="file" id="audioFileInput" accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.aac" style="display:none" onchange="caricaFileAudio(this)">
-                <button class="wa-action-icon" title="Allega audio o file" onclick="document.getElementById('audioFileInput').click()">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>
-                </button>
-            </div>
-            
-            <!-- CAMPO TESTO STANDARD -->
-            <div class="wa-input-wrapper" id="inputWrapper">
-                <input type="text" id="userInput" placeholder="Scrivi un messaggio" onkeypress="if(event.key === 'Enter') invia()" autocomplete="off">
-            </div>
-
-            <!-- BARRA REGISTRAZIONE LIVE (stile WhatsApp) -->
-            <div class="wa-recording-bar" id="recordingBar">
-                <div class="wa-recording-info">
-                    <div class="wa-rec-indicator"></div>
-                    <span class="wa-rec-timer" id="recTimer">0:00</span>
-                    <span class="wa-rec-label">Registrazione...</span>
-                </div>
-                <div class="wa-rec-actions">
-                    <button class="wa-rec-btn" onclick="annullaRegistrazione()" title="Annulla registrazione">
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="#ea4335"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                    </button>
-                    <button class="wa-rec-btn send" onclick="fermaEInviaRegistrazione()" title="Invia messaggio vocale">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-                    </button>
-                </div>
-            </div>
-
-            <!-- DOPPIO PULSANTE: MICROFONO E INVIA -->
-            <div class="wa-btn-group" id="btnGroup">
-                <button id="micBtn" onclick="avviaRegistrazione()" aria-label="Registra messaggio vocale" title="Registra messaggio vocale">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-                </button>
-                <button id="sendBtn" onclick="invia()" aria-label="Invia messaggio" title="Invia messaggio">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODALE LIGHTBOX PER FOTO AD ALTA RISOLUZIONE -->
-    <div id="imgModal" onclick="this.style.display='none'">
-        <img id="modalImg" src="">
-        <div class="zoom-hint">Tocca ovunque per chiudere</div>
-    </div>
-
-    <script>
-        let mediaRecorder = null;
-        let audioChunks = [];
-        let recInterval = null;
-        let recSeconds = 0;
-
-        function getOrario() {
-            let d = new Date();
-            let hh = String(d.getHours()).padStart(2, '0');
-            let mm = String(d.getMinutes()).padStart(2, '0');
-            return `${hh}:${mm}`;
-        }
-
-        window.onload = () => {
-            aggiungiMessaggio("Ciao! Sono Nino, il tuo consulente commerciale So Food.<br>Come posso aiutarti oggi per il tuo locale?", "nino");
-        };
-
-        function apriZoom(src) {
-            document.getElementById("modalImg").src = src;
-            document.getElementById("imgModal").style.display = "flex";
-        }
-
-        async function avviaRegistrazione() {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                alert("Il tuo browser non supporta la registrazione diretta del microfono. Puoi allegare un file audio usando l'icona con la graffetta!");
-                return;
-            }
-
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                audioChunks = [];
-
-                let options = {};
-                if (window.MediaRecorder && MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-                    options = { mimeType: "audio/webm;codecs=opus" };
-                } else if (window.MediaRecorder && MediaRecorder.isTypeSupported("audio/webm")) {
-                    options = { mimeType: "audio/webm" };
-                } else if (window.MediaRecorder && MediaRecorder.isTypeSupported("audio/mp4")) {
-                    options = { mimeType: "audio/mp4" };
-                }
-
-                mediaRecorder = new MediaRecorder(stream, options);
-                mediaRecorder.ondataavailable = (e) => {
-                    if (e.data && e.data.size > 0) audioChunks.push(e.data);
-                };
-
-                mediaRecorder.onstop = () => {
-                    stream.getTracks().forEach(track => track.stop());
-                    if (mediaRecorder.wasCancelled || audioChunks.length === 0) return;
-                    const mime = mediaRecorder.mimeType || "audio/webm";
-                    const blob = new Blob(audioChunks, { type: mime });
-                    inviaBlobAudio(blob, mime.includes("mp4") ? "vocale.m4a" : "vocale.webm");
-                };
-
-                mediaRecorder.wasCancelled = false;
-                mediaRecorder.start();
-
-                document.getElementById("inputWrapper").style.display = "none";
-                document.getElementById("btnGroup").style.display = "none";
-                document.getElementById("recordingBar").style.display = "flex";
-
-                recSeconds = 0;
-                document.getElementById("recTimer").textContent = "0:00";
-                recInterval = setInterval(() => {
-                    recSeconds++;
-                    let m = Math.floor(recSeconds / 60);
-                    let s = String(recSeconds % 60).padStart(2, '0');
-                    document.getElementById("recTimer").textContent = `${m}:${s}`;
-                }, 1000);
-
-            } catch (err) {
-                console.error("Accesso microfono negato o non disponibile:", err);
-                alert("Impossibile accedere al microfono. Verifica che i permessi del browser siano attivi.");
-            }
-        }
-
-        function fermaEInviaRegistrazione() {
-            if (recInterval) clearInterval(recInterval);
-            if (mediaRecorder && mediaRecorder.state === "recording") {
-                mediaRecorder.stop();
-            }
-            ripristinaBarraInput();
-        }
-
-        function annullaRegistrazione() {
-            if (recInterval) clearInterval(recInterval);
-            if (mediaRecorder && mediaRecorder.state === "recording") {
-                mediaRecorder.wasCancelled = true;
-                mediaRecorder.stop();
-            }
-            ripristinaBarraInput();
-        }
-
-        function ripristinaBarraInput() {
-            document.getElementById("recordingBar").style.display = "none";
-            document.getElementById("inputWrapper").style.display = "flex";
-            document.getElementById("btnGroup").style.display = "flex";
-        }
-
-        function caricaFileAudio(input) {
-            if (input.files && input.files[0]) {
-                let file = input.files[0];
-                inviaBlobAudio(file, file.name);
-                input.value = "";
-            }
-        }
-
-        function formattaImmaginiNino(rispostaNino) {
-            return rispostaNino.replace(/\[IMG:\s*(.*?)\]/g, function(match, percorso) {
-                let p = (percorso || "").trim();
-                if (!p || p.toUpperCase().includes("DISPONIBILE") || p.toUpperCase().includes("NESSUNA") || (!p.includes("\\") && !p.includes("/"))) {
-                    return "";
-                }
-                let urlSicuro = "/immagine?path=" + encodeURIComponent(p);
-                return `<img src="${urlSicuro}" class="product-img" onclick="apriZoom('${urlSicuro}')" title="Tocca per ingrandire" loading="lazy">`;
-            });
-        }
-
-        async function inviaBlobAudio(blob, nomeFile = "vocale.webm") {
-            let audioUrlLocale = URL.createObjectURL(blob);
-            let msgId = "vocale-" + Date.now();
-
-            aggiungiMessaggio("", "tu", {
-                id: msgId,
-                audioUrl: audioUrlLocale,
-                transcription: "Trascrizione in corso..."
-            });
-
-            let statusEl = document.getElementById("waStatus");
-            if (statusEl) {
-                statusEl.textContent = "sta ascoltando il vocale...";
-                statusEl.style.color = "#a7f3d0";
-            }
-
-            let chatbox = document.getElementById("chatbox");
-            let loadingId = "loading-" + Date.now();
-            chatbox.innerHTML += `
-                <div id="${loadingId}" class="msg-row nino">
-                    <div class="wa-bubble nino">
-                        <div class="wa-typing">
-                            <span class="wa-dot"></span><span class="wa-dot"></span><span class="wa-dot"></span>
-                        </div>
-                    </div>
-                </div>`;
-            chatbox.scrollTop = chatbox.scrollHeight;
-
-            let formData = new FormData();
-            formData.append("audio", blob, nomeFile);
-
-            try {
-                let response = await fetch('/chat_audio', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                let data = await response.json();
-                
-                let elTrascrizione = document.getElementById("trascrizione-" + msgId);
-                if (elTrascrizione) {
-                    if (data.transcription && data.transcription.trim()) {
-                        elTrascrizione.textContent = `"${data.transcription.trim()}"`;
-                    } else {
-                        elTrascrizione.innerHTML = `<i>Nessun parlato rilevato</i>`;
-                    }
-                }
-
-                let rispostaNino = formattaImmaginiNino(data.reply || "");
-
-                let loadingEl = document.getElementById(loadingId);
-                if (loadingEl) loadingEl.remove();
-
-                if (statusEl) {
-                    statusEl.textContent = "online";
-                    statusEl.style.color = "#d1fae5";
-                }
-
-                aggiungiMessaggio(rispostaNino, "nino");
-            } catch (err) {
-                console.error("Errore invio vocale:", err);
-                let loadingEl = document.getElementById(loadingId);
-                if (loadingEl) loadingEl.remove();
-                if (statusEl) {
-                    statusEl.textContent = "online";
-                    statusEl.style.color = "#d1fae5";
-                }
-                aggiungiMessaggio("<i>C'è stato un problema durante l'invio o la trascrizione del vocale. Riprova!</i>", "nino");
-            }
-        }
-
-        async function invia() {
-            let input = document.getElementById("userInput");
-            let testo = input.value;
-            if (!testo.trim()) return;
-
-            aggiungiMessaggio(testo, "tu");
-            input.value = "";
-
-            let statusEl = document.getElementById("waStatus");
-            if (statusEl) {
-                statusEl.textContent = "sta scrivendo...";
-                statusEl.style.color = "#a7f3d0";
-            }
-
-            let chatbox = document.getElementById("chatbox");
-            let loadingId = "loading-" + Date.now();
-            chatbox.innerHTML += `
-                <div id="${loadingId}" class="msg-row nino">
-                    <div class="wa-bubble nino">
-                        <div class="wa-typing">
-                            <span class="wa-dot"></span><span class="wa-dot"></span><span class="wa-dot"></span>
-                        </div>
-                    </div>
-                </div>`;
-            chatbox.scrollTop = chatbox.scrollHeight;
-
-            try {
-                let response = await fetch('/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: testo })
-                });
-
-                let data = await response.json();
-                let rispostaNino = formattaImmaginiNino(data.reply || "");
-
-                let loadingEl = document.getElementById(loadingId);
-                if (loadingEl) loadingEl.remove();
-
-                if (statusEl) {
-                    statusEl.textContent = "online";
-                    statusEl.style.color = "#d1fae5";
-                }
-
-                aggiungiMessaggio(rispostaNino, "nino");
-            } catch (error) {
-                let loadingEl = document.getElementById(loadingId);
-                if (loadingEl) loadingEl.remove();
-                if (statusEl) {
-                    statusEl.textContent = "online";
-                    statusEl.style.color = "#d1fae5";
-                }
-                aggiungiMessaggio("<i>Scusa, c'è stato un piccolo errore di connessione. Riprova tra poco!</i>", "nino");
-            }
-        }
-
-        function escapeHtml(str) {
-            const div = document.createElement('div');
-            div.textContent = str;
-            return div.innerHTML;
-        }
-
-        function aggiungiMessaggio(testo, classe, opzioniAudio = null) {
-            let chatbox = document.getElementById("chatbox");
-            let orario = getOrario();
-            let ticks = (classe === "tu") ? `<span class="ticks">✓✓</span>` : "";
-            // Escape il testo per prevenire XSS injection
-            let testoSicuro = (classe === "tu") ? escapeHtml(testo) : testo;
-
-            let contenutoHtml = "";
-            if (opzioniAudio) {
-                contenutoHtml += `
-                    <div class="wa-audio-container">
-                        <audio controls class="wa-audio-player" src="${opzioniAudio.audioUrl}"></audio>
-                        <div class="wa-transcription-box">
-                            <div class="wa-transcription-label">
-                                <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-                                Vocale Trascritto
-                            </div>
-                            <span id="trascrizione-${opzioniAudio.id || ''}">${opzioniAudio.transcription || ''}</span>
-                        </div>
-                    </div>`;
-            }
-
-            if (testoSicuro) {
-                let tf = testoSicuro;
-                // 1. Titoli markdown (###, ##, #) -> wa-heading
-                tf = tf.replace(/^###\s*(.*?)$/gm, '<div class="wa-heading">$1</div>');
-                tf = tf.replace(/^##\s*(.*?)$/gm, '<div class="wa-heading">$1</div>');
-                tf = tf.replace(/^#\s*(.*?)$/gm, '<div class="wa-heading">$1</div>');
-                // 2. Linee divisorie orizzontali (---)
-                tf = tf.replace(/^---$/gm, '<hr class="wa-divider">');
-                // 3. Elenchi puntati (* o - a inizio riga)
-                tf = tf.replace(/^[\*\-]\s+(.*?)$/gm, '<div class="wa-bullet"><span class="wa-dot-bullet">•</span><span>$1</span></div>');
-                // 4. Elenchi numerati (1., 2., ecc.)
-                tf = tf.replace(/^(\d+)[\.\)]\s+(.*?)$/gm, '<div class="wa-bullet"><span class="wa-num-bullet">$1.</span><span>$2</span></div>');
-                // 5. Bold & Italic combinato: ***testo***
-                tf = tf.replace(/\*\*\*(.*?)\*\*\*/g, "<strong><em>$1</em></strong>");
-                // 6. Bold: **testo**
-                tf = tf.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-                // 7. Italic: *testo* o _testo_ (senza toccare tag già convertiti)
-                tf = tf.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, "<em>$1</em>");
-                tf = tf.replace(/\b_([^_\n]+?)_\b/g, "<em>$1</em>");
-                // 8. A capo
-                tf = tf.replace(/\n\n+/g, "<br><br>");
-                tf = tf.replace(/\n/g, "<br>");
-                // 9. Pulizia spazi extra tra blocchi div/hr e br
-                tf = tf.replace(/<\/div><br>/g, "</div>");
-                tf = tf.replace(/<hr class="wa-divider"><br>/g, '<hr class="wa-divider">');
-
-                contenutoHtml += `<div class="bubble-content">${tf}</div>`;
-            }
-
-            let bubbleHtml = `
-                <div class="msg-row ${classe}">
-                    <div class="wa-bubble ${classe}">
-                        ${contenutoHtml}
-                        <div class="bubble-meta">
-                            <span>${orario}</span>${ticks}
-                        </div>
-                    </div>
-                </div>`;
-
-            chatbox.innerHTML += bubbleHtml;
-            chatbox.scrollTop = chatbox.scrollHeight;
-        }
-    </script>
-</body>
-</html>
-"""
-
 if __name__ == "__main__":
     import sys
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     print("="*70)
     print("[OK] SERVER FLASK AVVIATO CON SUCCESSO!")
-    print(">>> Apri il tuo browser e vai all'indirizzo: http://127.0.0.1:5000")
+    print(">>> In ascolto su http://127.0.0.1:5000 (API /api/v1/chat/stream e webhook WhatsApp)")
     print("="*70)
     app.run(debug=False, use_reloader=False)
